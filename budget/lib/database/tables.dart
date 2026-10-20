@@ -26,7 +26,7 @@ import 'package:budget/pages/activityPage.dart';
 import 'package:flutter/material.dart' show RangeValues;
 part 'tables.g.dart';
 
-int schemaVersionGlobal = 47; // Локальная версия: 47 — подгруппы счетов
+int schemaVersionGlobal = 48; // Локальная версия: 47 — подгруппы счетов, 48 — цели подгрупп
 
 // To update and migrate the database, check the README
 
@@ -349,6 +349,9 @@ class Envelopes extends Table {
   TextColumn get name => text().withLength(max: NAME_LIMIT)();
   // Доля по умолчанию при распределении пополнений, в процентах (0–100)
   RealColumn get percent => real().withDefault(const Constant(0))();
+  // Необязательная цель накопления: сумма и/или дата
+  RealColumn get targetAmount => real().nullable()();
+  DateTimeColumn get targetDate => dateTime().nullable()();
   IntColumn get order => integer()();
   DateTimeColumn get dateCreated =>
       dateTime().clientDefault(() => new DateTime.now())();
