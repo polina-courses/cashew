@@ -67,7 +67,10 @@ class TransactionsAmountBox extends StatelessWidget {
                   children: [
                     TextFont(
                       textAlign: TextAlign.center,
-                      maxLines: 3,
+                      maxLines: 1,
+                      // Локальная версия: длинная подпись уменьшается, а не переносится по буквам
+                      autoSizeText: true,
+                      minFontSize: 12,
                       text: label,
                       fontSize: 18,
                       fontWeight: FontWeight.bold,

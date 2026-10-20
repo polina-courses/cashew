@@ -1,10 +1,29 @@
-import 'package:auto_size_text/auto_size_text.dart';
 import 'package:budget/colors.dart';
 import 'package:budget/functions.dart';
 import 'package:budget/struct/settings.dart';
 import 'package:budget/widgets/openBottomSheet.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
+
+// Локальная версия: подпись вкладки уменьшается под ширину, а не вылезает за неё
+Widget _tabLabel(String text) {
+  return Padding(
+    padding: const EdgeInsetsDirectional.only(top: 5.0),
+    child: FittedBox(
+      fit: BoxFit.scaleDown,
+      child: Text(
+        text,
+        maxLines: 1,
+        softWrap: false,
+        style: TextStyle(
+          fontSize: 14,
+          fontFamily: appStateSettings["font"],
+          fontFamilyFallback: ['Inter'],
+        ),
+      ),
+    ),
+  );
+}
 
 class SlidingSelectorIncomeExpense extends StatelessWidget {
   const SlidingSelectorIncomeExpense({
@@ -65,6 +84,10 @@ class SlidingSelectorIncomeExpense extends StatelessWidget {
                   onTap: (value) {
                     onSelected(value + 1);
                   },
+                  // Локальная версия: меньше боковых отступов, чтобы длинные подписи
+                  // («Просроченные») помещались в узкие вкладки
+                  labelPadding:
+                      const EdgeInsetsDirectional.symmetric(horizontal: 4),
                   dividerColor: Colors.transparent,
                   indicatorColor: Colors.transparent,
                   indicatorSize: TabBarIndicatorSize.tab,
@@ -79,71 +102,19 @@ class SlidingSelectorIncomeExpense extends StatelessWidget {
                   tabs: options == null
                       ? [
                           Tab(
-                            child: Padding(
-                              padding:
-                                  const EdgeInsetsDirectional.only(top: 5.0),
-                              child: AutoSizeText(
-                                minFontSize: 11,
-                                maxLines: 1,
-                                "all".tr(),
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  fontFamily: appStateSettings["font"],
-                                  fontFamilyFallback: ['Inter'],
-                                ),
-                              ),
-                            ),
+                            child: _tabLabel("all".tr()),
                           ),
                           Tab(
-                            child: Padding(
-                              padding:
-                                  const EdgeInsetsDirectional.only(top: 5.0),
-                              child: AutoSizeText(
-                                minFontSize: 11,
-                                maxLines: 1,
-                                "expense".tr(),
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  fontFamily: appStateSettings["font"],
-                                  fontFamilyFallback: ['Inter'],
-                                ),
-                              ),
-                            ),
+                            child: _tabLabel("expense".tr()),
                           ),
                           Tab(
-                            child: Padding(
-                              padding:
-                                  const EdgeInsetsDirectional.only(top: 5.0),
-                              child: AutoSizeText(
-                                minFontSize: 11,
-                                maxLines: 1,
-                                "income".tr(),
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  fontFamily: appStateSettings["font"],
-                                  fontFamilyFallback: ['Inter'],
-                                ),
-                              ),
-                            ),
+                            child: _tabLabel("income".tr()),
                           ),
                         ]
                       : [
                           for (String option in options!)
                             Tab(
-                              child: Padding(
-                                padding:
-                                    const EdgeInsetsDirectional.only(top: 5.0),
-                                child: AutoSizeText(
-                                  minFontSize: 11,
-                                  maxLines: 1,
-                                  option.tr(),
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    fontFamily: appStateSettings["font"],
-                                    fontFamilyFallback: ['Inter'],
-                                  ),
-                                ),
-                              ),
+                              child: _tabLabel(option.tr()),
                             ),
                         ],
                 ),
