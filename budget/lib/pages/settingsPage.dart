@@ -42,6 +42,7 @@ import 'package:budget/widgets/restartApp.dart';
 import 'package:budget/widgets/selectAmount.dart';
 import 'package:budget/widgets/selectColor.dart';
 import 'package:budget/widgets/settingsContainers.dart';
+import 'package:budget/widgets/appUpdate.dart';
 import 'package:budget/pages/walletDetailsPage.dart';
 import 'package:budget/struct/initializeBiometrics.dart';
 import 'package:budget/widgets/sliderSelector.dart';
@@ -114,6 +115,8 @@ class MoreActionsPageState extends State<MoreActionsPage> {
           ),
         ],
         listWidgets: [
+          // Локальная версия: проверка обновлений из GitHub Releases
+          AppUpdateSettingsTile(),
           MorePages()
         ],
       );
