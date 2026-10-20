@@ -62,8 +62,8 @@ class _AddWalletPageState extends State<AddWalletPage> {
   Map<String, dynamic> currencies = {};
   bool customCurrencyIcon = false;
   String? searchCurrency = "";
-  String selectedCurrency =
-      getDevicesDefaultCurrencyCode(); //if no currency selected use empty string
+  // Локальная версия: все счета в российских рублях
+  String selectedCurrency = "rub";
   int selectedDecimals = 2;
   FocusNode _titleFocusNode = FocusNode();
 
@@ -164,7 +164,7 @@ class _AddWalletPageState extends State<AddWalletPage> {
       selectedColor = widget.wallet!.colour == null
           ? null
           : HexColor(widget.wallet!.colour);
-      selectedCurrency = widget.wallet!.currency ?? "usd";
+      selectedCurrency = widget.wallet!.currency ?? "rub";
       selectedDecimals = widget.wallet!.decimals;
     }
     populateCurrencies();
@@ -683,17 +683,7 @@ class _AddWalletPageState extends State<AddWalletPage> {
               ),
             ),
           SliverToBoxAdapter(child: SizedBox(height: 10)),
-          CurrencyPicker(
-            showExchangeRateInfoNotice: true,
-            onSelected: setSelectedCurrency,
-            initialCurrency: selectedCurrency,
-            onHasFocus: () {
-              // Disable scroll when focus - because iOS header height is different than that of Android.
-              // Future.delayed(Duration(milliseconds: 500), () {
-              //   addWalletPageKey.currentState?.scrollTo(250);
-              // });
-            },
-          ),
+          // Локальная версия: выбор валюты убран, счёт всегда в рублях
           SliverToBoxAdapter(child: SizedBox(height: 65)),
           // SliverToBoxAdapter(
           //   child: KeyboardHeightAreaAnimated(),

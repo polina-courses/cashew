@@ -685,7 +685,7 @@ class MoreOptionsPagePreferences extends StatelessWidget {
         TransactionsSettings(),
         SettingsHeader(title: "accounts".tr()),
         WalletsSettings(),
-        PrimaryCurrencySetting(),
+        // Локальная версия: валюта одна — российский рубль, выбор валюты убран
         SettingsHeader(title: "budgets".tr()),
         BudgetSettings(),
         SettingsHeader(title: "goals".tr()),
