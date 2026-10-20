@@ -37,7 +37,7 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          V=$(grep -oP 'int schemaVersionGlobal = \K[0-9]+' lib/database/tables.dart)
+          V=$(grep -oP '^int schemaVersionGlobal = \K[0-9]+' lib/database/tables.dart | head -1)
           echo "Schema version: $V"
           dart run drift_dev schema dump lib/database/tables.dart drift_schemas/drift_schema_v$V.json 2>&1 | tee -a codegen.log
           if [ ! -f drift_schemas/drift_schema_v$V.json ]; then echo "НЕТ ФАЙЛА drift_schema_v$V.json" | tee -a codegen.log; exit 1; fi
