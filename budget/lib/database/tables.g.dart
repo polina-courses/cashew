@@ -6680,6 +6680,11 @@ class $EnvelopesTable extends Envelopes
   late final GeneratedColumn<DateTime> targetDate = GeneratedColumn<DateTime>(
       'target_date', aliasedName, true,
       type: DriftSqlType.dateTime, requiredDuringInsert: false);
+  static const VerificationMeta _noteMeta = const VerificationMeta('note');
+  @override
+  late final GeneratedColumn<String> note = GeneratedColumn<String>(
+      'note', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
   static const VerificationMeta _orderMeta = const VerificationMeta('order');
   @override
   late final GeneratedColumn<int> order = GeneratedColumn<int>(
@@ -6701,6 +6706,7 @@ class $EnvelopesTable extends Envelopes
         percent,
         targetAmount,
         targetDate,
+        note,
         order,
         dateCreated
       ];
@@ -6748,6 +6754,10 @@ class $EnvelopesTable extends Envelopes
           targetDate.isAcceptableOrUnknown(
               data['target_date']!, _targetDateMeta));
     }
+    if (data.containsKey('note')) {
+      context.handle(
+          _noteMeta, note.isAcceptableOrUnknown(data['note']!, _noteMeta));
+    }
     if (data.containsKey('order')) {
       context.handle(
           _orderMeta, order.isAcceptableOrUnknown(data['order']!, _orderMeta));
@@ -6781,6 +6791,8 @@ class $EnvelopesTable extends Envelopes
           .read(DriftSqlType.double, data['${effectivePrefix}target_amount']),
       targetDate: attachedDatabase.typeMapping
           .read(DriftSqlType.dateTime, data['${effectivePrefix}target_date']),
+      note: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}note']),
       order: attachedDatabase.typeMapping
           .read(DriftSqlType.int, data['${effectivePrefix}order'])!,
       dateCreated: attachedDatabase.typeMapping
@@ -6801,6 +6813,7 @@ class Envelope extends DataClass implements Insertable<Envelope> {
   final double percent;
   final double? targetAmount;
   final DateTime? targetDate;
+  final String? note;
   final int order;
   final DateTime dateCreated;
   const Envelope(
@@ -6810,6 +6823,7 @@ class Envelope extends DataClass implements Insertable<Envelope> {
       required this.percent,
       this.targetAmount,
       this.targetDate,
+      this.note,
       required this.order,
       required this.dateCreated});
   @override
@@ -6824,6 +6838,9 @@ class Envelope extends DataClass implements Insertable<Envelope> {
     }
     if (!nullToAbsent || targetDate != null) {
       map['target_date'] = Variable<DateTime>(targetDate);
+    }
+    if (!nullToAbsent || note != null) {
+      map['note'] = Variable<String>(note);
     }
     map['order'] = Variable<int>(order);
     map['date_created'] = Variable<DateTime>(dateCreated);
@@ -6842,6 +6859,7 @@ class Envelope extends DataClass implements Insertable<Envelope> {
       targetDate: targetDate == null && nullToAbsent
           ? const Value.absent()
           : Value(targetDate),
+      note: note == null && nullToAbsent ? const Value.absent() : Value(note),
       order: Value(order),
       dateCreated: Value(dateCreated),
     );
@@ -6857,6 +6875,7 @@ class Envelope extends DataClass implements Insertable<Envelope> {
       percent: serializer.fromJson<double>(json['percent']),
       targetAmount: serializer.fromJson<double?>(json['targetAmount']),
       targetDate: serializer.fromJson<DateTime?>(json['targetDate']),
+      note: serializer.fromJson<String?>(json['note']),
       order: serializer.fromJson<int>(json['order']),
       dateCreated: serializer.fromJson<DateTime>(json['dateCreated']),
     );
@@ -6871,6 +6890,7 @@ class Envelope extends DataClass implements Insertable<Envelope> {
       'percent': serializer.toJson<double>(percent),
       'targetAmount': serializer.toJson<double?>(targetAmount),
       'targetDate': serializer.toJson<DateTime?>(targetDate),
+      'note': serializer.toJson<String?>(note),
       'order': serializer.toJson<int>(order),
       'dateCreated': serializer.toJson<DateTime>(dateCreated),
     };
@@ -6883,6 +6903,7 @@ class Envelope extends DataClass implements Insertable<Envelope> {
           double? percent,
           Value<double?> targetAmount = const Value.absent(),
           Value<DateTime?> targetDate = const Value.absent(),
+          Value<String?> note = const Value.absent(),
           int? order,
           DateTime? dateCreated}) =>
       Envelope(
@@ -6893,6 +6914,7 @@ class Envelope extends DataClass implements Insertable<Envelope> {
         targetAmount:
             targetAmount.present ? targetAmount.value : this.targetAmount,
         targetDate: targetDate.present ? targetDate.value : this.targetDate,
+        note: note.present ? note.value : this.note,
         order: order ?? this.order,
         dateCreated: dateCreated ?? this.dateCreated,
       );
@@ -6905,6 +6927,7 @@ class Envelope extends DataClass implements Insertable<Envelope> {
           ..write('percent: $percent, ')
           ..write('targetAmount: $targetAmount, ')
           ..write('targetDate: $targetDate, ')
+          ..write('note: $note, ')
           ..write('order: $order, ')
           ..write('dateCreated: $dateCreated')
           ..write(')'))
@@ -6913,7 +6936,7 @@ class Envelope extends DataClass implements Insertable<Envelope> {
 
   @override
   int get hashCode => Object.hash(envelopePk, walletFk, name, percent,
-      targetAmount, targetDate, order, dateCreated);
+      targetAmount, targetDate, note, order, dateCreated);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -6924,6 +6947,7 @@ class Envelope extends DataClass implements Insertable<Envelope> {
           other.percent == this.percent &&
           other.targetAmount == this.targetAmount &&
           other.targetDate == this.targetDate &&
+          other.note == this.note &&
           other.order == this.order &&
           other.dateCreated == this.dateCreated);
 }
@@ -6935,6 +6959,7 @@ class EnvelopesCompanion extends UpdateCompanion<Envelope> {
   final Value<double> percent;
   final Value<double?> targetAmount;
   final Value<DateTime?> targetDate;
+  final Value<String?> note;
   final Value<int> order;
   final Value<DateTime> dateCreated;
   final Value<int> rowid;
@@ -6945,6 +6970,7 @@ class EnvelopesCompanion extends UpdateCompanion<Envelope> {
     this.percent = const Value.absent(),
     this.targetAmount = const Value.absent(),
     this.targetDate = const Value.absent(),
+    this.note = const Value.absent(),
     this.order = const Value.absent(),
     this.dateCreated = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -6956,6 +6982,7 @@ class EnvelopesCompanion extends UpdateCompanion<Envelope> {
     this.percent = const Value.absent(),
     this.targetAmount = const Value.absent(),
     this.targetDate = const Value.absent(),
+    this.note = const Value.absent(),
     required int order,
     this.dateCreated = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -6969,6 +6996,7 @@ class EnvelopesCompanion extends UpdateCompanion<Envelope> {
     Expression<double>? percent,
     Expression<double>? targetAmount,
     Expression<DateTime>? targetDate,
+    Expression<String>? note,
     Expression<int>? order,
     Expression<DateTime>? dateCreated,
     Expression<int>? rowid,
@@ -6980,6 +7008,7 @@ class EnvelopesCompanion extends UpdateCompanion<Envelope> {
       if (percent != null) 'percent': percent,
       if (targetAmount != null) 'target_amount': targetAmount,
       if (targetDate != null) 'target_date': targetDate,
+      if (note != null) 'note': note,
       if (order != null) 'order': order,
       if (dateCreated != null) 'date_created': dateCreated,
       if (rowid != null) 'rowid': rowid,
@@ -6993,6 +7022,7 @@ class EnvelopesCompanion extends UpdateCompanion<Envelope> {
       Value<double>? percent,
       Value<double?>? targetAmount,
       Value<DateTime?>? targetDate,
+      Value<String?>? note,
       Value<int>? order,
       Value<DateTime>? dateCreated,
       Value<int>? rowid}) {
@@ -7003,6 +7033,7 @@ class EnvelopesCompanion extends UpdateCompanion<Envelope> {
       percent: percent ?? this.percent,
       targetAmount: targetAmount ?? this.targetAmount,
       targetDate: targetDate ?? this.targetDate,
+      note: note ?? this.note,
       order: order ?? this.order,
       dateCreated: dateCreated ?? this.dateCreated,
       rowid: rowid ?? this.rowid,
@@ -7030,6 +7061,9 @@ class EnvelopesCompanion extends UpdateCompanion<Envelope> {
     if (targetDate.present) {
       map['target_date'] = Variable<DateTime>(targetDate.value);
     }
+    if (note.present) {
+      map['note'] = Variable<String>(note.value);
+    }
     if (order.present) {
       map['order'] = Variable<int>(order.value);
     }
@@ -7051,6 +7085,7 @@ class EnvelopesCompanion extends UpdateCompanion<Envelope> {
           ..write('percent: $percent, ')
           ..write('targetAmount: $targetAmount, ')
           ..write('targetDate: $targetDate, ')
+          ..write('note: $note, ')
           ..write('order: $order, ')
           ..write('dateCreated: $dateCreated, ')
           ..write('rowid: $rowid')
@@ -10571,6 +10606,7 @@ typedef $$EnvelopesTableInsertCompanionBuilder = EnvelopesCompanion Function({
   Value<double> percent,
   Value<double?> targetAmount,
   Value<DateTime?> targetDate,
+  Value<String?> note,
   required int order,
   Value<DateTime> dateCreated,
   Value<int> rowid,
@@ -10582,6 +10618,7 @@ typedef $$EnvelopesTableUpdateCompanionBuilder = EnvelopesCompanion Function({
   Value<double> percent,
   Value<double?> targetAmount,
   Value<DateTime?> targetDate,
+  Value<String?> note,
   Value<int> order,
   Value<DateTime> dateCreated,
   Value<int> rowid,
@@ -10613,6 +10650,7 @@ class $$EnvelopesTableTableManager extends RootTableManager<
             Value<double> percent = const Value.absent(),
             Value<double?> targetAmount = const Value.absent(),
             Value<DateTime?> targetDate = const Value.absent(),
+            Value<String?> note = const Value.absent(),
             Value<int> order = const Value.absent(),
             Value<DateTime> dateCreated = const Value.absent(),
             Value<int> rowid = const Value.absent(),
@@ -10624,6 +10662,7 @@ class $$EnvelopesTableTableManager extends RootTableManager<
             percent: percent,
             targetAmount: targetAmount,
             targetDate: targetDate,
+            note: note,
             order: order,
             dateCreated: dateCreated,
             rowid: rowid,
@@ -10635,6 +10674,7 @@ class $$EnvelopesTableTableManager extends RootTableManager<
             Value<double> percent = const Value.absent(),
             Value<double?> targetAmount = const Value.absent(),
             Value<DateTime?> targetDate = const Value.absent(),
+            Value<String?> note = const Value.absent(),
             required int order,
             Value<DateTime> dateCreated = const Value.absent(),
             Value<int> rowid = const Value.absent(),
@@ -10646,6 +10686,7 @@ class $$EnvelopesTableTableManager extends RootTableManager<
             percent: percent,
             targetAmount: targetAmount,
             targetDate: targetDate,
+            note: note,
             order: order,
             dateCreated: dateCreated,
             rowid: rowid,
@@ -10698,6 +10739,11 @@ class $$EnvelopesTableFilterComposer
       builder: (column, joinBuilders) =>
           ColumnFilters(column, joinBuilders: joinBuilders));
 
+  ColumnFilters<String> get note => $state.composableBuilder(
+      column: $state.table.note,
+      builder: (column, joinBuilders) =>
+          ColumnFilters(column, joinBuilders: joinBuilders));
+
   ColumnFilters<int> get order => $state.composableBuilder(
       column: $state.table.order,
       builder: (column, joinBuilders) =>
@@ -10739,6 +10785,11 @@ class $$EnvelopesTableOrderingComposer
 
   ColumnOrderings<DateTime> get targetDate => $state.composableBuilder(
       column: $state.table.targetDate,
+      builder: (column, joinBuilders) =>
+          ColumnOrderings(column, joinBuilders: joinBuilders));
+
+  ColumnOrderings<String> get note => $state.composableBuilder(
+      column: $state.table.note,
       builder: (column, joinBuilders) =>
           ColumnOrderings(column, joinBuilders: joinBuilders));
 
