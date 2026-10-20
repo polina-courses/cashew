@@ -81,8 +81,10 @@ extension EnvelopeQueries on FinanceDatabase {
     ));
   }
 
+  /// Полная перезапись строки: пустые (null) поля тоже сохраняются,
+  /// поэтому убрать цель, дату или заметку можно.
   Future<void> updateEnvelope(Envelope envelope) async {
-    await into(envelopes).insertOnConflictUpdate(envelope);
+    await update(envelopes).replace(envelope);
   }
 
   /// Удаляет подгруппу: её остаток возвращается в свободные деньги счёта,
