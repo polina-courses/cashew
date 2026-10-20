@@ -40,7 +40,17 @@ jobs:
           V=$(grep -oP 'int schemaVersionGlobal = \K[0-9]+' lib/database/tables.dart)
           echo "Schema version: $V"
           dart run drift_dev schema dump lib/database/tables.dart drift_schemas/drift_schema_v$V.json 2>&1 | tee -a codegen.log
+          if [ ! -f drift_schemas/drift_schema_v$V.json ]; then echo "НЕТ ФАЙЛА drift_schema_v$V.json" | tee -a codegen.log; exit 1; fi
           dart run drift_dev schema steps drift_schemas/ lib/database/schema_versions.dart 2>&1 | tee -a codegen.log
+          grep -q "from$((V-1))To$V" lib/database/schema_versions.dart || { echo "В schema_versions.dart нет шага на v$V" | tee -a codegen.log; exit 1; }
+
+      - name: Лог генерации
+        if: always()
+        shell: bash
+        run: |
+          [ -f codegen.log ] || exit 0
+          msg=$(grep -v "^\[INFO\]" codegen.log | tail -40 | sed -e 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
+          echo "::notice title=Лог генерации::$msg"
 
       - name: Показать ошибку
         if: failure()
