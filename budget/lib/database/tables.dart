@@ -26,7 +26,7 @@ import 'package:budget/pages/activityPage.dart';
 import 'package:flutter/material.dart' show RangeValues;
 part 'tables.g.dart';
 
-int schemaVersionGlobal = 48; // Локальная версия: 47 — подгруппы счетов, 48 — цели подгрупп
+int schemaVersionGlobal = 49; // Локальная версия: 47 — подгруппы счетов, 48 — цели подгрупп, 49 — заметки подгрупп
 
 // To update and migrate the database, check the README
 
@@ -352,6 +352,8 @@ class Envelopes extends Table {
   // Необязательная цель накопления: сумма и/или дата
   RealColumn get targetAmount => real().nullable()();
   DateTimeColumn get targetDate => dateTime().nullable()();
+  // Заметка пользователя
+  TextColumn get note => text().nullable()();
   IntColumn get order => integer()();
   DateTimeColumn get dateCreated =>
       dateTime().clientDefault(() => new DateTime.now())();
