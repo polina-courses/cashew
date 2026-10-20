@@ -1,0 +1,63 @@
+# Локальная версия: генерация кода базы данных (drift) после изменения таблиц.
+# Запускается на пуш в ветку codegen/... и коммитит сгенерированные файлы обратно:
+#   lib/database/tables.g.dart, drift_schemas/drift_schema_vN.json, lib/database/schema_versions.dart
+name: Codegen
+
+on:
+  push:
+    branches: ["codegen/**"]
+
+permissions:
+  contents: write
+
+jobs:
+  codegen:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: budget
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.19.6"
+          channel: stable
+          cache: true
+
+      - run: flutter pub get
+
+      - name: build_runner
+        shell: bash
+        run: |
+          set -o pipefail
+          dart run build_runner build --delete-conflicting-outputs 2>&1 | tee codegen.log
+
+      - name: Дамп схемы и шаги миграций
+        shell: bash
+        run: |
+          set -o pipefail
+          V=$(grep -oP 'int schemaVersionGlobal = \K[0-9]+' lib/database/tables.dart)
+          echo "Schema version: $V"
+          dart run drift_dev schema dump lib/database/tables.dart drift_schemas/drift_schema_v$V.json 2>&1 | tee -a codegen.log
+          dart run drift_dev schema steps drift_schemas/ lib/database/schema_versions.dart 2>&1 | tee -a codegen.log
+
+      - name: Показать ошибку
+        if: failure()
+        shell: bash
+        run: |
+          [ -f codegen.log ] || exit 0
+          msg=$(tail -60 codegen.log | sed -e 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
+          echo "::error title=Ошибка генерации::$msg"
+
+      - name: Закоммитить результат
+        shell: bash
+        run: |
+          rm -f codegen.log
+          git config user.name "codegen-bot"
+          git config user.email "codegen-bot@users.noreply.github.com"
+          git add -A
+          git status --short
+          if git diff --cached --quiet; then echo "Нет изменений"; exit 0; fi
+          git commit -m "Сгенерированный код базы данных"
+          git push

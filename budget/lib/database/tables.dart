@@ -26,7 +26,7 @@ import 'package:budget/pages/activityPage.dart';
 import 'package:flutter/material.dart' show RangeValues;
 part 'tables.g.dart';
 
-int schemaVersionGlobal = 46;
+int schemaVersionGlobal = 47; // Локальная версия: 47 — подгруппы счетов
 
 // To update and migrate the database, check the README
 
@@ -334,9 +334,45 @@ class Transactions extends Table {
       text().references(Objectives, #objectivePk).nullable()();
   TextColumn get budgetFksExclude =>
       text().map(const StringListInColumnConverter()).nullable()();
+  // Локальная версия: подгруппа счёта, из которой сделана трата
+  TextColumn get envelopeFk => text().nullable()();
 
   @override
   Set<Column> get primaryKey => {transactionPk};
+}
+
+// Локальная версия: подгруппы счёта («конверты») — корм, лекарства, игрушки...
+@DataClassName('Envelope')
+class Envelopes extends Table {
+  TextColumn get envelopePk => text().clientDefault(() => uuid.v4())();
+  TextColumn get walletFk => text()();
+  TextColumn get name => text().withLength(max: NAME_LIMIT)();
+  // Доля по умолчанию при распределении пополнений, в процентах (0–100)
+  RealColumn get percent => real().withDefault(const Constant(0))();
+  IntColumn get order => integer()();
+  DateTimeColumn get dateCreated =>
+      dateTime().clientDefault(() => new DateTime.now())();
+
+  @override
+  Set<Column> get primaryKey => {envelopePk};
+}
+
+// Локальная версия: перемещения денег между свободным остатком счёта и подгруппами.
+// fromEnvelopeFk / toEnvelopeFk == null означает «свободные деньги счёта».
+@DataClassName('EnvelopeMove')
+class EnvelopeMoves extends Table {
+  TextColumn get envelopeMovePk => text().clientDefault(() => uuid.v4())();
+  TextColumn get walletFk => text()();
+  TextColumn get fromEnvelopeFk => text().nullable()();
+  TextColumn get toEnvelopeFk => text().nullable()();
+  RealColumn get amount => real()();
+  // Пополнение, при распределении которого создано перемещение
+  TextColumn get sourceTransactionFk => text().nullable()();
+  DateTimeColumn get dateCreated =>
+      dateTime().clientDefault(() => new DateTime.now())();
+
+  @override
+  Set<Column> get primaryKey => {envelopeMovePk};
 }
 
 @DataClassName('TransactionCategory')
@@ -688,6 +724,8 @@ class CategoryWithTotal {
   ScannerTemplates,
   DeleteLogs,
   Objectives,
+  Envelopes,
+  EnvelopeMoves,
 ])
 class FinanceDatabase extends _$FinanceDatabase {
   // FinanceDatabase() : super(_openConnection());
