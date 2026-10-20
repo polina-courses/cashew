@@ -285,6 +285,17 @@ class _EnvelopesList extends StatelessWidget {
                           fontSize: 16,
                           maxLines: 1,
                         ),
+                        if ((envelope.note ?? "").trim().isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsetsDirectional.only(
+                                top: 1, bottom: 2, end: 10),
+                            child: TextFont(
+                              text: envelope.note!.trim(),
+                              fontSize: 13,
+                              maxLines: 3,
+                              textColor: getColor(context, "textLight"),
+                            ),
+                          ),
                         if (envelope.percent > 0)
                           TextFont(
                             text: "доля " +
@@ -460,6 +471,8 @@ class _EnvelopeEditorState extends State<EnvelopeEditor> {
           : formatNumberForInput(
               widget.envelope!.targetAmount!, widget.wallet.decimals));
   late DateTime? targetDate = widget.envelope?.targetDate;
+  late TextEditingController noteController =
+      TextEditingController(text: widget.envelope?.note ?? "");
   double currentBalance = 0;
   String? error;
 
@@ -481,7 +494,13 @@ class _EnvelopeEditorState extends State<EnvelopeEditor> {
     nameController.dispose();
     percentController.dispose();
     targetController.dispose();
+    noteController.dispose();
     super.dispose();
+  }
+
+  String? get noteText {
+    String text = noteController.text.trim();
+    return text.isEmpty ? null : text;
   }
 
   double? get parsedTarget {
@@ -535,6 +554,7 @@ class _EnvelopeEditorState extends State<EnvelopeEditor> {
         percent: percent,
         targetAmount: parsedTarget,
         targetDate: targetDate,
+        note: noteText,
       );
     } else {
       await database.updateEnvelope(widget.envelope!.copyWith(
@@ -542,6 +562,7 @@ class _EnvelopeEditorState extends State<EnvelopeEditor> {
         percent: percent,
         targetAmount: Value(parsedTarget),
         targetDate: Value(targetDate),
+        note: Value(noteText),
       ));
     }
     popRoute(context);
@@ -592,6 +613,16 @@ class _EnvelopeEditorState extends State<EnvelopeEditor> {
             controller: percentController,
             padding: EdgeInsetsDirectional.zero,
             keyboardType: TextInputType.numberWithOptions(decimal: true),
+          ),
+          SizedBox(height: 10),
+          TextInput(
+            labelText: "Заметка (необязательно)",
+            controller: noteController,
+            padding: EdgeInsetsDirectional.zero,
+            minLines: 2,
+            maxLines: 6,
+            keyboardType: TextInputType.multiline,
+            textCapitalization: TextCapitalization.sentences,
           ),
           SizedBox(height: 18),
           Align(
