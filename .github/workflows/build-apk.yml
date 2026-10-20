@@ -53,6 +53,21 @@ jobs:
 
       - run: flutter pub get
 
+      - name: Тесты
+        shell: bash
+        run: |
+          sudo apt-get install -y libsqlite3-dev >/dev/null
+          set -o pipefail
+          flutter test test/envelopes_test.dart 2>&1 | tee test.log
+
+      - name: Показать ошибку тестов
+        if: failure()
+        shell: bash
+        run: |
+          [ -f test.log ] || exit 0
+          msg=$(grep -v "^\s*$" test.log | tail -50 | sed -e 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
+          echo "::error title=Ошибка тестов::$msg"
+
       - name: Собрать APK
         # Номер сборки растёт с каждым запуском, чтобы Android принимал обновление
         shell: bash
