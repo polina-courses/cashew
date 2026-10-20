@@ -24,7 +24,9 @@ if (flutterVersionName == null) {
 apply plugin: 'com.android.application'
 apply plugin: 'kotlin-android'
 apply from: "$flutterRoot/packages/flutter_tools/gradle/flutter.gradle"
-apply plugin: 'com.google.gms.google-services'
+// Отключено для локальной сборки: google-services.json привязан к пакету автора.
+// Firebase инициализируется из lib/firebase_options.dart и без этого плагина.
+// apply plugin: 'com.google.gms.google-services'
 
 def keystoreProperties = new Properties()
 def keystorePropertiesFile = rootProject.file('key.properties')
@@ -41,7 +43,8 @@ android {
 
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId "com.budget.tracker_app"
+        // Свой ID, чтобы ставиться рядом с оригиналом из Google Play
+        applicationId "com.polina.cashew"
         minSdkVersion 23
         targetSdkVersion 34
         versionCode flutterVersionCode.toInteger()
@@ -74,7 +77,8 @@ android {
     }
     buildTypes {
         release {
-            signingConfig signingConfigs.release
+            // Если key.properties нет — подписываем debug-ключом (для личного использования)
+            signingConfig keystorePropertiesFile.exists() ? signingConfigs.release : signingConfigs.debug
         }
     }
 }
