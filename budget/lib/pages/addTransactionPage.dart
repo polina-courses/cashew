@@ -467,6 +467,12 @@ class _AddTransactionPageState extends State<AddTransactionPage>
         await addAssociatedTitles(selectedTitle!, selectedCategory!);
       }
 
+      // Локальная версия: доход без категории сохраняем в служебную категорию «Без категории»
+      if (selectedCategory == null && selectedIncome == true) {
+        selectedCategory = await getOrCreateIncomeNoCategory();
+        selectedSubCategory = null;
+      }
+
       Transaction createdTransaction = await createTransaction();
 
       if (widget.transaction != null) {
@@ -2094,7 +2100,8 @@ class _AddTransactionPageState extends State<AddTransactionPage>
             child: Row(
               children: [
                 Expanded(
-                  child: selectedCategory == null
+                  // Локальная версия: для дохода категория необязательна
+                  child: selectedCategory == null && selectedIncome == false
                       ? Button(
                           hasBottomExtraSafeArea: true,
                           label: "select-category".tr(),
@@ -3854,6 +3861,31 @@ class MainAndSubcategory {
   String toString() {
     return 'main: $main, sub: $sub, ignoredSubcategorySelection: $ignoredSubcategorySelection';
   }
+}
+
+// Локальная версия: служебная категория для доходов, у которых категория не выбрана.
+// Создаётся один раз при первом таком доходе, дальше переиспользуется.
+const String incomeNoCategoryPk = "income-no-category";
+
+Future<TransactionCategory> getOrCreateIncomeNoCategory() async {
+  TransactionCategory? existing =
+      await database.getCategoryInstanceOrNull(incomeNoCategoryPk);
+  if (existing != null) return existing;
+  int order = await database.getAmountOfCategories();
+  await database.createOrUpdateCategory(
+    TransactionCategory(
+      categoryPk: incomeNoCategoryPk,
+      name: "Без категории",
+      colour: toHexString(Colors.blueGrey.shade300),
+      iconName: "coin.png",
+      dateCreated: DateTime.now(),
+      dateTimeModified: null,
+      order: order,
+      income: true,
+    ),
+    updateSharedEntry: false,
+  );
+  return await database.getCategoryInstance(incomeNoCategoryPk);
 }
 
 // ignoredSubcategorySelection is true if the subcategory is skipped
