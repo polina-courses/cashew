@@ -1,4 +1,5 @@
 import 'package:budget/database/tables.dart';
+import 'package:budget/widgets/envelopes.dart';
 import 'package:budget/functions.dart';
 import 'package:budget/pages/addBudgetPage.dart';
 import 'package:budget/pages/addTransactionPage.dart';
@@ -724,6 +725,8 @@ class WalletDetailsPageState extends State<WalletDetailsPage>
                       padding: const EdgeInsetsDirectional.only(bottom: 13),
                       child: selectedTabCurrent,
                     ),
+                    // Локальная версия: подгруппы счёта
+                    WalletEnvelopesSection(wallet: widget.wallet!),
                     // TipBox(
                     //   padding: const EdgeInsetsDirectional.only(bottom: 13),
                     //   onTap: () {

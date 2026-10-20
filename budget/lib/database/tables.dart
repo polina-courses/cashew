@@ -1202,6 +1202,29 @@ class FinanceDatabase extends _$FinanceDatabase {
                         e.toString());
               }
             },
+            // Локальная версия: подгруппы счетов
+            from46To47: (m, schema) async {
+              try {
+                await m.addColumn(
+                    schema.transactions, schema.transactions.envelopeFk);
+              } catch (e) {
+                print(
+                    "Migration Error: Error creating column transactions.envelopeFk " +
+                        e.toString());
+              }
+              try {
+                await m.createTable(schema.envelopes);
+              } catch (e) {
+                print("Migration Error: Error creating table envelopes " +
+                    e.toString());
+              }
+              try {
+                await m.createTable(schema.envelopeMoves);
+              } catch (e) {
+                print("Migration Error: Error creating table envelopeMoves " +
+                    e.toString());
+              }
+            },
           ),
         );
       },
@@ -4931,6 +4954,10 @@ class FinanceDatabase extends _$FinanceDatabase {
       }
     }
     await createDeleteLog(DeleteLogType.Transaction, transactionPk);
+    // Локальная версия: убрать распределения по подгруппам, сделанные из этого пополнения
+    await (delete(envelopeMoves)
+          ..where((m) => m.sourceTransactionFk.equals(transactionPk)))
+        .go();
     return (delete(transactions)
           ..where((t) => t.transactionPk.equals(transactionPk)))
         .go();
@@ -4955,6 +4982,10 @@ class FinanceDatabase extends _$FinanceDatabase {
     }
 
     await createDeleteLogs(DeleteLogType.Transaction, transactionPks);
+    // Локальная версия: убрать распределения по подгруппам, сделанные из этих пополнений
+    await (delete(envelopeMoves)
+          ..where((m) => m.sourceTransactionFk.isIn(transactionPks)))
+        .go();
     return (delete(transactions)
           ..where((t) => t.transactionPk.isIn(transactionPks)))
         .go();
@@ -5111,6 +5142,10 @@ class FinanceDatabase extends _$FinanceDatabase {
       setPrimaryWallet("0");
     }
     await database.deleteWalletsTransactions(walletPk);
+    // Локальная версия: подгруппы счёта и их перемещения
+    await (delete(envelopeMoves)..where((m) => m.walletFk.equals(walletPk)))
+        .go();
+    await (delete(envelopes)..where((e) => e.walletFk.equals(walletPk))).go();
     await database.shiftWallets(-1, order);
     await createDeleteLog(DeleteLogType.TransactionWallet, walletPk);
     await (delete(wallets)..where((w) => w.walletPk.equals(walletPk))).go();

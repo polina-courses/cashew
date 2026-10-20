@@ -1,5 +1,7 @@
 import 'package:budget/database/generatePreviewData.dart';
 import 'package:budget/database/tables.dart';
+import 'package:budget/database/envelopes.dart';
+import 'package:budget/widgets/envelopes.dart';
 import 'package:budget/functions.dart';
 import 'package:budget/pages/addBudgetPage.dart';
 import 'package:budget/pages/addCategoryPage.dart';
@@ -163,6 +165,48 @@ class _AddTransactionPageState extends State<AddTransactionPage>
   // bool isSettingUpBalanceTransfer = false;
 
   String? textAddTransaction = "add-transaction".tr();
+
+  // Локальная версия: подгруппы счёта
+  String? selectedEnvelopePk;
+  bool walletHasEnvelopes = false;
+  StreamSubscription<List<Envelope>>? envelopesSubscription;
+  String? envelopesSubscribedWalletPk;
+
+  void listenToEnvelopes() {
+    if (envelopesSubscribedWalletPk == selectedWalletPk &&
+        envelopesSubscription != null) return;
+    envelopesSubscription?.cancel();
+    envelopesSubscribedWalletPk = selectedWalletPk;
+    envelopesSubscription =
+        database.watchEnvelopes(selectedWalletPk).listen((envelopeList) {
+      if (!mounted) return;
+      setState(() {
+        walletHasEnvelopes = envelopeList.isNotEmpty;
+        if (selectedEnvelopePk != null &&
+            envelopeList.every((e) => e.envelopePk != selectedEnvelopePk)) {
+          selectedEnvelopePk = null;
+        }
+      });
+    });
+  }
+
+  // Трата со счёта с подгруппами требует выбрать подгруппу (переводы между счетами — нет)
+  bool get needsEnvelope =>
+      walletHasEnvelopes &&
+      selectedIncome == false &&
+      selectedCategory?.categoryPk != "0";
+
+  void setSelectedEnvelopePk(String? envelopePk) {
+    setState(() {
+      selectedEnvelopePk = envelopePk;
+    });
+  }
+
+  @override
+  void dispose() {
+    envelopesSubscription?.cancel();
+    super.dispose();
+  }
 
   Future<void> selectEndDate(BuildContext context) async {
     final DateTime? picked =
@@ -366,8 +410,10 @@ class _AddTransactionPageState extends State<AddTransactionPage>
 
   void setSelectedWalletPk(String selectedWalletPkPassed) {
     setState(() {
+      if (selectedWalletPk != selectedWalletPkPassed) selectedEnvelopePk = null;
       selectedWalletPk = selectedWalletPkPassed;
     });
+    listenToEnvelopes();
   }
 
   Future<Transaction> addDefaultMissingValues(Transaction transaction) async {
@@ -465,6 +511,47 @@ class _AddTransactionPageState extends State<AddTransactionPage>
         //   await addAssociatedTitles(selectedTitle!, selectedCategory!);
         // }
         await addAssociatedTitles(selectedTitle!, selectedCategory!);
+      }
+
+      // Локальная версия: трата со счёта с подгруппами — подгруппа обязательна
+      if (needsEnvelope) {
+        TransactionWallet? envelopeWallet = getSelectedWallet(listen: false);
+        if (selectedEnvelopePk == null && envelopeWallet != null) {
+          String? picked = await pickEnvelope(context, envelopeWallet);
+          if (picked == null) return false;
+          setSelectedEnvelopePk(picked);
+        }
+        if (selectedEnvelopePk == null) return false;
+        if (selectedPaid && envelopeWallet != null) {
+          EnvelopeBalances balances =
+              await database.getEnvelopeBalances(selectedWalletPk);
+          double balance = balances.balanceOf(selectedEnvelopePk!);
+          Transaction? editing = widget.transaction;
+          if (editing != null &&
+              editing.paid &&
+              editing.envelopeFk == selectedEnvelopePk) {
+            balance -= editing.amount;
+          }
+          double after = balance - (selectedAmount ?? 0).abs();
+          if (after < 0) {
+            String envelopeName = balances.envelopes
+                .firstWhere((e) => e.envelopePk == selectedEnvelopePk)
+                .name;
+            bool? confirmed = await openPopup<bool>(
+              context,
+              title: "Не хватает денег в «$envelopeName»",
+              description: "После этой траты в подгруппе будет " +
+                  envelopeMoney(context, envelopeWallet, after) +
+                  ". Сохранить всё равно?",
+              icon: Icons.warning_amber_rounded,
+              onSubmitLabel: "Сохранить",
+              onSubmit: () => popRoute(context, true),
+              onCancelLabel: "Отмена",
+              onCancel: () => popRoute(context, false),
+            );
+            if (confirmed != true) return false;
+          }
+        }
       }
 
       // Локальная версия: доход без категории сохраняем в служебную категорию «Без категории»
@@ -568,6 +655,23 @@ class _AddTransactionPageState extends State<AddTransactionPage>
         print("Transaction just added:");
         print(transactionJustAdded);
 
+        // Локальная версия: новое пополнение счёта с подгруппами — предложить распределить
+        TransactionWallet? distributeWallet = getSelectedWallet(listen: false);
+        if (widget.transaction == null &&
+            walletHasEnvelopes &&
+            distributeWallet != null &&
+            transactionJustAdded.income &&
+            transactionJustAdded.paid &&
+            transactionJustAdded.amount > 0 &&
+            transactionJustAdded.categoryFk != "0") {
+          await openDistributeSheet(
+            context,
+            wallet: distributeWallet,
+            amount: transactionJustAdded.amount,
+            sourceTransactionPk: transactionJustAdded.transactionPk,
+          );
+        }
+
         // Do the flash animation only if the date was changed
         if (transactionJustAdded.dateCreated !=
             widget.transaction?.dateCreated) {
@@ -670,6 +774,7 @@ class _AddTransactionPageState extends State<AddTransactionPage>
       dateTimeModified: null,
       income: selectedIncome,
       walletFk: selectedWalletPk,
+      envelopeFk: needsEnvelope ? selectedEnvelopePk : null,
       paid: selectedPaid,
       skipPaid: skipPaid,
       type: selectedType,
@@ -761,6 +866,7 @@ class _AddTransactionPageState extends State<AddTransactionPage>
       selectedObjectivePk = widget.transaction!.objectiveFk;
       selectedObjectiveLoanPk = widget.transaction!.objectiveLoanFk;
       selectedExcludedBudgetPks = widget.transaction!.budgetFksExclude ?? [];
+      selectedEnvelopePk = widget.transaction!.envelopeFk;
       // var amountString = widget.transaction!.amount.toStringAsFixed(2);
       // if (amountString.substring(amountString.length - 2) == "00") {
       //   selectedAmountCalculation =
@@ -865,6 +971,7 @@ class _AddTransactionPageState extends State<AddTransactionPage>
         transactionInitial = createTransaction();
       });
     }
+    listenToEnvelopes();
 
     setState(() {});
   }
@@ -2021,7 +2128,15 @@ class _AddTransactionPageState extends State<AddTransactionPage>
               selectedCategoryPk: selectedCategory!.categoryPk,
               selectedSubCategoryPk: selectedSubCategory?.categoryPk,
               padding: const EdgeInsetsDirectional.only(bottom: 6),
-            )
+            ),
+          // Локальная версия: из какой подгруппы счёта трата
+          if (needsEnvelope && getSelectedWallet(listen: true) != null)
+            SelectEnvelopeChips(
+              wallet: getSelectedWallet(listen: true)!,
+              selectedEnvelopePk: selectedEnvelopePk,
+              onSelected: setSelectedEnvelopePk,
+              editingTransaction: widget.transaction,
+            ),
         ],
       ),
     );
@@ -2117,7 +2232,21 @@ class _AddTransactionPageState extends State<AddTransactionPage>
                             );
                           },
                         )
-                      : selectedAmount == null
+                      : needsEnvelope && selectedEnvelopePk == null
+                          ? Button(
+                              hasBottomExtraSafeArea: true,
+                              label: "Выбрать подгруппу",
+                              onTap: () async {
+                                TransactionWallet? wallet =
+                                    getSelectedWallet(listen: false);
+                                if (wallet == null) return;
+                                String? picked =
+                                    await pickEnvelope(context, wallet);
+                                if (picked != null)
+                                  setSelectedEnvelopePk(picked);
+                              },
+                            )
+                          : selectedAmount == null
                           ? Button(
                               hasBottomExtraSafeArea: true,
                               label: "enter-amount".tr(),

@@ -5,7 +5,8 @@ name: Build APK
 
 on:
   push:
-    branches: [main]
+    # feature/** — только проверка сборки, без публикации в Releases
+    branches: [main, "feature/**"]
   workflow_dispatch:
 
 permissions:
@@ -72,9 +73,11 @@ jobs:
           echo "::error title=Ошибка сборки::$msg"
 
       - name: Переименовать
+        if: github.ref == 'refs/heads/main'
         run: cp build/app/outputs/flutter-apk/app-release.apk ../cashew-local-${{ github.run_number }}.apk
 
       - name: Выложить в Releases
+        if: github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: build-${{ github.run_number }}
