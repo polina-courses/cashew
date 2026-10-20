@@ -1228,6 +1228,24 @@ class FinanceDatabase extends _$FinanceDatabase {
                     e.toString());
               }
             },
+            // Локальная версия: цели подгрупп
+            from47To48: (m, schema) async {
+              try {
+                await m.addColumn(
+                    schema.envelopes, schema.envelopes.targetAmount);
+              } catch (e) {
+                print(
+                    "Migration Error: Error creating column envelopes.targetAmount " +
+                        e.toString());
+              }
+              try {
+                await m.addColumn(schema.envelopes, schema.envelopes.targetDate);
+              } catch (e) {
+                print(
+                    "Migration Error: Error creating column envelopes.targetDate " +
+                        e.toString());
+              }
+            },
           ),
         );
       },

@@ -12,6 +12,8 @@ import 'package:budget/widgets/openPopup.dart';
 import 'package:budget/widgets/tappable.dart';
 import 'package:budget/widgets/textInput.dart';
 import 'package:budget/widgets/textWidgets.dart';
+import 'package:budget/widgets/util/showDatePicker.dart';
+import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -54,6 +56,121 @@ String envelopeMoney(BuildContext context, TransactionWallet wallet,
 Color envelopeAmountColor(BuildContext context, double amount) {
   if (amount < 0) return getColor(context, "expenseAmount");
   return getColor(context, "black");
+}
+
+// ---------------------------------------------------------------------------
+// Цель подгруппы: сумма и/или дата, расчёт рекомендуемого пополнения
+
+class EnvelopeGoal {
+  EnvelopeGoal({
+    required this.targetAmount,
+    required this.targetDate,
+    required this.balance,
+  });
+  final double? targetAmount;
+  final DateTime? targetDate;
+  final double balance;
+
+  bool get hasGoal => targetAmount != null || targetDate != null;
+  bool get hasAmount => targetAmount != null && targetAmount! > 0;
+
+  double get remaining {
+    if (!hasAmount) return 0;
+    double left = targetAmount! - balance;
+    return left > 0 ? left : 0;
+  }
+
+  bool get reached => hasAmount && remaining <= 0;
+
+  double get progress {
+    if (!hasAmount) return 0;
+    double value = balance / targetAmount!;
+    if (value < 0) return 0;
+    if (value > 1) return 1;
+    return value;
+  }
+
+  /// Дней до даты (сегодня = 0). null — дата не задана.
+  int? get daysLeft {
+    if (targetDate == null) return null;
+    DateTime now = DateTime.now();
+    DateTime today = DateTime(now.year, now.month, now.day);
+    DateTime target =
+        DateTime(targetDate!.year, targetDate!.month, targetDate!.day);
+    return target.difference(today).inDays;
+  }
+
+  /// Сколько месяцев осталось (не меньше 1), если до даты больше месяца.
+  int? get monthsLeft {
+    int? days = daysLeft;
+    if (days == null || days < 31) return null;
+    int months = (days / 30.4375).round();
+    return months < 1 ? 1 : months;
+  }
+
+  /// Рекомендуемое пополнение в месяц.
+  double? get monthlyRecommended {
+    if (!hasAmount || reached) return null;
+    int? months = monthsLeft;
+    if (months == null) return null;
+    return remaining / months;
+  }
+}
+
+EnvelopeGoal envelopeGoalOf(Envelope envelope, double balance) {
+  return EnvelopeGoal(
+    targetAmount: envelope.targetAmount,
+    targetDate: envelope.targetDate,
+    balance: balance,
+  );
+}
+
+String envelopeDate(DateTime date) {
+  return getWordedDateShort(date, includeYear: true, showTodayTomorrow: false);
+}
+
+/// Строка прогресса: «6 000 из 9 000 · к 20 янв. 2027 г.»
+String? envelopeGoalProgressText(
+    BuildContext context, TransactionWallet wallet, EnvelopeGoal goal) {
+  if (!goal.hasGoal) return null;
+  List<String> parts = [];
+  if (goal.hasAmount) {
+    parts.add(envelopeMoney(context, wallet, goal.balance) +
+        " из " +
+        envelopeMoney(context, wallet, goal.targetAmount!));
+  }
+  if (goal.targetDate != null) {
+    parts.add("к " + envelopeDate(goal.targetDate!));
+  }
+  return parts.join(" · ");
+}
+
+/// Подсказка: сколько откладывать, достигнута ли цель, не прошёл ли срок.
+String? envelopeGoalHintText(
+    BuildContext context, TransactionWallet wallet, EnvelopeGoal goal) {
+  if (!goal.hasAmount) return null;
+  if (goal.reached) return "Цель достигнута";
+  String remaining = envelopeMoney(context, wallet, goal.remaining);
+  int? days = goal.daysLeft;
+  if (days == null) return "Осталось накопить " + remaining;
+  if (days < 0) return "Срок прошёл, не хватает " + remaining;
+  if (days == 0) return "Срок сегодня, не хватает " + remaining;
+  double? monthly = goal.monthlyRecommended;
+  if (monthly == null) {
+    return "До даты " + days.toString() + " дн., нужно ещё " + remaining;
+  }
+  return "Откладывайте ≈ " +
+      envelopeMoney(context, wallet, monthly) +
+      " в месяц (осталось " +
+      goal.monthsLeft.toString() +
+      " мес.)";
+}
+
+Color envelopeGoalHintColor(BuildContext context, EnvelopeGoal goal) {
+  if (goal.reached) return getColor(context, "incomeAmount");
+  int? days = goal.daysLeft;
+  if (days != null && days <= 0) return getColor(context, "expenseAmount");
+  return getColor(context, "textLight");
 }
 
 // ---------------------------------------------------------------------------
@@ -176,6 +293,11 @@ class _EnvelopesList extends StatelessWidget {
                             fontSize: 12,
                             textColor: getColor(context, "textLight"),
                           ),
+                        _EnvelopeGoalLines(
+                          wallet: wallet,
+                          goal: envelopeGoalOf(
+                              envelope, data.balanceOf(envelope.envelopePk)),
+                        ),
                       ],
                     ),
                   ),
@@ -253,6 +375,57 @@ class _EnvelopesList extends StatelessWidget {
   }
 }
 
+class _EnvelopeGoalLines extends StatelessWidget {
+  const _EnvelopeGoalLines({required this.wallet, required this.goal});
+  final TransactionWallet wallet;
+  final EnvelopeGoal goal;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!goal.hasGoal) return SizedBox.shrink();
+    String? progress = envelopeGoalProgressText(context, wallet, goal);
+    String? hint = envelopeGoalHintText(context, wallet, goal);
+    return Padding(
+      padding: const EdgeInsetsDirectional.only(top: 3, end: 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (progress != null)
+            TextFont(
+              text: progress,
+              fontSize: 12,
+              maxLines: 2,
+              textColor: getColor(context, "textLight"),
+            ),
+          if (goal.hasAmount)
+            Padding(
+              padding: const EdgeInsetsDirectional.symmetric(vertical: 4),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: LinearProgressIndicator(
+                  value: goal.progress,
+                  minHeight: 5,
+                  backgroundColor:
+                      Theme.of(context).colorScheme.secondaryContainer,
+                  color: goal.reached
+                      ? getColor(context, "incomeAmount")
+                      : Theme.of(context).colorScheme.primary,
+                ),
+              ),
+            ),
+          if (hint != null)
+            TextFont(
+              text: hint,
+              fontSize: 12,
+              maxLines: 2,
+              textColor: envelopeGoalHintColor(context, goal),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Добавление / изменение / удаление подгруппы
 
@@ -281,13 +454,51 @@ class _EnvelopeEditorState extends State<EnvelopeEditor> {
       text: widget.envelope == null || widget.envelope!.percent == 0
           ? ""
           : formatNumberForInput(widget.envelope!.percent, 1));
+  late TextEditingController targetController = TextEditingController(
+      text: widget.envelope?.targetAmount == null
+          ? ""
+          : formatNumberForInput(
+              widget.envelope!.targetAmount!, widget.wallet.decimals));
+  late DateTime? targetDate = widget.envelope?.targetDate;
+  double currentBalance = 0;
   String? error;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.envelope != null) {
+      database.getEnvelopeBalances(widget.wallet.walletPk).then((balances) {
+        if (!mounted) return;
+        setState(() {
+          currentBalance = balances.balanceOf(widget.envelope!.envelopePk);
+        });
+      });
+    }
+  }
 
   @override
   void dispose() {
     nameController.dispose();
     percentController.dispose();
+    targetController.dispose();
     super.dispose();
+  }
+
+  double? get parsedTarget {
+    double? value = parseEnvelopeNumber(targetController.text);
+    if (value == null || value <= 0) return null;
+    return value;
+  }
+
+  Future<void> pickTargetDate() async {
+    DateTime initial =
+        targetDate ?? DateTime.now().add(Duration(days: 30));
+    DateTime? picked = await showCustomDatePicker(context, initial);
+    if (picked != null) {
+      setState(() {
+        targetDate = DateTime(picked.year, picked.month, picked.day);
+      });
+    }
   }
 
   Future<void> save() async {
@@ -299,6 +510,11 @@ class _EnvelopeEditorState extends State<EnvelopeEditor> {
     }
     if (percent == null || percent < 0 || percent > 100) {
       setState(() => error = "Доля — число от 0 до 100");
+      return;
+    }
+    double? target = parseEnvelopeNumber(targetController.text);
+    if (target == null || target < 0) {
+      setState(() => error = "Целевая сумма — положительное число");
       return;
     }
     List<Envelope> others = (await database.getEnvelopes(widget.wallet.walletPk))
@@ -317,10 +533,16 @@ class _EnvelopeEditorState extends State<EnvelopeEditor> {
         walletPk: widget.wallet.walletPk,
         name: name,
         percent: percent,
+        targetAmount: parsedTarget,
+        targetDate: targetDate,
       );
     } else {
-      await database.updateEnvelope(
-          widget.envelope!.copyWith(name: name, percent: percent));
+      await database.updateEnvelope(widget.envelope!.copyWith(
+        name: name,
+        percent: percent,
+        targetAmount: Value(parsedTarget),
+        targetDate: Value(targetDate),
+      ));
     }
     popRoute(context);
   }
@@ -371,6 +593,67 @@ class _EnvelopeEditorState extends State<EnvelopeEditor> {
             padding: EdgeInsetsDirectional.zero,
             keyboardType: TextInputType.numberWithOptions(decimal: true),
           ),
+          SizedBox(height: 18),
+          Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: TextFont(
+              text: "Цель (необязательно)",
+              fontSize: 15,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          SizedBox(height: 8),
+          TextInput(
+            labelText: "Накопить сумму",
+            controller: targetController,
+            padding: EdgeInsetsDirectional.zero,
+            keyboardType: TextInputType.numberWithOptions(decimal: true),
+            onChanged: (_) => setState(() {}),
+          ),
+          SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: Button(
+                  label: targetDate == null
+                      ? "Выбрать дату"
+                      : "К дате: " + envelopeDate(targetDate!),
+                  icon: Icons.event_rounded,
+                  expandedLayout: true,
+                  color: Theme.of(context).colorScheme.secondaryContainer,
+                  textColor: Theme.of(context).colorScheme.onSecondaryContainer,
+                  onTap: pickTargetDate,
+                ),
+              ),
+              if (targetDate != null)
+                IconButton(
+                  tooltip: "Убрать дату",
+                  icon: Icon(Icons.close_rounded),
+                  onPressed: () => setState(() => targetDate = null),
+                ),
+            ],
+          ),
+          Builder(builder: (context) {
+            EnvelopeGoal goal = EnvelopeGoal(
+              targetAmount: parsedTarget,
+              targetDate: targetDate,
+              balance: currentBalance,
+            );
+            String? hint = envelopeGoalHintText(context, widget.wallet, goal);
+            if (hint == null) return SizedBox.shrink();
+            return Padding(
+              padding: const EdgeInsetsDirectional.only(top: 10),
+              child: Align(
+                alignment: AlignmentDirectional.centerStart,
+                child: TextFont(
+                  text: hint,
+                  fontSize: 14,
+                  maxLines: 3,
+                  textColor: envelopeGoalHintColor(context, goal),
+                ),
+              ),
+            );
+          }),
           if (error != null)
             Padding(
               padding: const EdgeInsetsDirectional.only(top: 10),
@@ -421,13 +704,16 @@ Future openDistributeSheet(
   String? sourceTransactionPk,
   String title = "Распределить пополнение",
 }) async {
-  List<Envelope> envelopeList = await database.getEnvelopes(wallet.walletPk);
+  EnvelopeBalances balances =
+      await database.getEnvelopeBalances(wallet.walletPk);
+  List<Envelope> envelopeList = balances.envelopes;
   if (envelopeList.isEmpty) return;
   return openBottomSheet(
     context,
     DistributeSheet(
       wallet: wallet,
       envelopes: envelopeList,
+      balances: balances,
       amount: amount,
       sourceTransactionPk: sourceTransactionPk,
       title: title,
@@ -441,6 +727,7 @@ class DistributeSheet extends StatefulWidget {
   const DistributeSheet({
     required this.wallet,
     required this.envelopes,
+    required this.balances,
     required this.amount,
     required this.sourceTransactionPk,
     required this.title,
@@ -448,6 +735,7 @@ class DistributeSheet extends StatefulWidget {
   });
   final TransactionWallet wallet;
   final List<Envelope> envelopes;
+  final EnvelopeBalances balances;
   final double amount;
   final String? sourceTransactionPk;
   final String title;
@@ -607,6 +895,22 @@ class _DistributeSheetState extends State<DistributeSheet> {
                           fontSize: 12,
                           textColor: getColor(context, "textLight"),
                         ),
+                        Builder(builder: (context) {
+                          double? monthly = envelopeGoalOf(
+                                  envelope,
+                                  widget.balances
+                                      .balanceOf(envelope.envelopePk))
+                              .monthlyRecommended;
+                          if (monthly == null) return SizedBox.shrink();
+                          return TextFont(
+                            text: "рекомендуется ≈ " +
+                                envelopeMoney(context, widget.wallet, monthly) +
+                                "/мес",
+                            fontSize: 12,
+                            maxLines: 2,
+                            textColor: Theme.of(context).colorScheme.primary,
+                          );
+                        }),
                       ],
                     ),
                   ),

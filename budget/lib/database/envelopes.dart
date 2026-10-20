@@ -65,12 +65,16 @@ extension EnvelopeQueries on FinanceDatabase {
     required String walletPk,
     required String name,
     required double percent,
+    double? targetAmount,
+    DateTime? targetDate,
   }) async {
     int count = (await getEnvelopes(walletPk)).length;
     await into(envelopes).insert(EnvelopesCompanion.insert(
       walletFk: walletPk,
       name: name.trim(),
       percent: Value(percent),
+      targetAmount: Value(targetAmount),
+      targetDate: Value(targetDate),
       order: count,
     ));
   }
