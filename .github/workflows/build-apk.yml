@@ -1,0 +1,69 @@
+# Локальная версия: собирает APK на каждый пуш в main и выкладывает его в Releases.
+# Подпись берётся из секретов репозитория (Settings → Secrets and variables → Actions):
+#   KEYSTORE_BASE64, KEYSTORE_PASSWORD, KEY_PASSWORD, KEY_ALIAS
+name: Build APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: budget
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.24.5"
+          channel: stable
+          cache: true
+
+      - name: Подготовить ключ подписи
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "::error::Секрет KEYSTORE_BASE64 не задан — без него обновления не будут ставиться поверх старой версии"
+            exit 1
+          fi
+          echo "$KEYSTORE_BASE64" | base64 -d > android/app/keystore.jks
+          {
+            echo "storePassword=$KEYSTORE_PASSWORD"
+            echo "keyPassword=$KEY_PASSWORD"
+            echo "keyAlias=$KEY_ALIAS"
+            echo "storeFile=keystore.jks"
+          } > android/key.properties
+
+      - run: flutter pub get
+
+      - name: Собрать APK
+        # Номер сборки растёт с каждым запуском, чтобы Android принимал обновление
+        run: flutter build apk --release --build-number=$((1000 + ${{ github.run_number }}))
+
+      - name: Переименовать
+        run: cp build/app/outputs/flutter-apk/app-release.apk ../cashew-local-${{ github.run_number }}.apk
+
+      - name: Выложить в Releases
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.run_number }}
+          name: "Сборка ${{ github.run_number }}"
+          body: ${{ github.event.head_commit.message }}
+          files: cashew-local-${{ github.run_number }}.apk
+          make_latest: true
