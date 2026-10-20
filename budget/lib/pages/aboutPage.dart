@@ -873,17 +873,6 @@ class AboutLinks extends StatelessWidget {
             _buildTappable(
               context: context,
               isExternalLink: false,
-              onTap: () =>
-                  openBottomSheet(context, RatingPopup(), fullSnap: true),
-              icon: appStateSettings["outlinedIcons"]
-                  ? Icons.rate_review_outlined
-                  : Icons.rate_review_rounded,
-              text: "feedback".tr(),
-            ),
-            const HorizontalBreak(padding: EdgeInsetsDirectional.zero),
-            _buildTappable(
-              context: context,
-              isExternalLink: false,
               onTap: () => showChangelogForce(context),
               icon: appStateSettings["outlinedIcons"]
                   ? Icons.list_alt_outlined

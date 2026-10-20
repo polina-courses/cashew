@@ -114,10 +114,6 @@ class MoreActionsPageState extends State<MoreActionsPage> {
           ),
         ],
         listWidgets: [
-          Padding(
-            padding: const EdgeInsetsDirectional.only(bottom: 8.0),
-            child: PremiumBanner(),
-          ),
           MorePages()
         ],
       );
@@ -196,22 +192,6 @@ class MorePages extends StatelessWidget {
                   title: "about-app".tr(namedArgs: {"app": globalAppName}),
                   icon: navBarIconsData["about"]!.iconData,
                   isOutlined: true,
-                ),
-              ),
-              Expanded(
-                child: Padding(
-                  padding: EdgeInsetsDirectional.symmetric(
-                      vertical: 5, horizontal: 4),
-                  child: SettingsContainer(
-                    onTap: () {
-                      openBottomSheet(context, RatingPopup(), fullSnap: true);
-                    },
-                    title: "feedback".tr(),
-                    icon: appStateSettings["outlinedIcons"]
-                        ? Icons.rate_review_outlined
-                        : Icons.rate_review_rounded,
-                    isOutlined: true,
-                  ),
                 ),
               ),
             ],

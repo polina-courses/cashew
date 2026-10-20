@@ -329,7 +329,7 @@ class HomePageState extends State<HomePage> with TickerProviderStateMixin {
                         : SizedBox(height: 5),
                     // Not full screen
                     if (enableDoubleColumn(context) != true) ...[
-                      KeepAliveClientMixin(child: HomePageRatingBox()),
+                      // Локальная версия: карточка «Оцените приложение» убрана
                       for (String sectionKey
                           in appStateSettings["homePageOrder"])
                         homePageSections[sectionKey] ?? SizedBox.shrink(),
