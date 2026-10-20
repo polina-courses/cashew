@@ -86,6 +86,7 @@ Future<bool> initializeSettings() async {
 
   await attemptToMigrateSetLongTermLoansAmountTo0();
   attemptToMigrateCustomNumberFormattingSettings();
+  localMoveGoalsBelowLoansOnce();
 
   // Disable sync every change is not on web
   // It will still sync when user pulls down to refresh
@@ -411,3 +412,30 @@ class TranslationsHelp extends StatelessWidget {
     );
   }
 }
+
+// Локальная версия: один раз переносит блок «Цели» на главной под кредиты/долги.
+// Дальше порядок можно менять как обычно (⋮ на главной → перетаскивание).
+void localMoveGoalsBelowLoansOnce() {
+  if (appStateSettings["localMovedGoalsBelowLoans"] == true) return;
+  try {
+    for (String key in ["homePageOrder", "homePageOrderFullScreen"]) {
+      List<dynamic>? stored = appStateSettings[key];
+      if (stored == null) continue;
+      List<dynamic> order = List<dynamic>.from(stored);
+      if (!order.contains("objectives")) continue;
+      order.remove("objectives");
+      int anchor = order.indexOf("objectiveLoans");
+      if (anchor == -1) anchor = order.indexOf("creditDebts");
+      if (anchor == -1) {
+        order.add("objectives");
+      } else {
+        order.insert(anchor + 1, "objectives");
+      }
+      appStateSettings[key] = order;
+    }
+  } catch (e) {
+    print("Error moving goals section " + e.toString());
+  }
+  appStateSettings["localMovedGoalsBelowLoans"] = true;
+}
+
