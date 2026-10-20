@@ -54,7 +54,22 @@ jobs:
 
       - name: Собрать APK
         # Номер сборки растёт с каждым запуском, чтобы Android принимал обновление
-        run: flutter build apk --release --build-number=$((1000 + ${{ github.run_number }}))
+        shell: bash
+        run: |
+          set -o pipefail
+          flutter build apk --release --build-number=$((1000 + ${{ github.run_number }})) 2>&1 | tee build.log
+
+      - name: Показать ошибку сборки
+        # Выводит хвост лога в аннотацию — её видно на странице запуска и через API
+        if: failure()
+        shell: bash
+        run: |
+          [ -f build.log ] || exit 0
+          grep -n -i -E "error|exception|failed|what went wrong" build.log | tail -40 > err.txt || true
+          echo "--- tail ---" >> err.txt
+          tail -40 build.log >> err.txt
+          msg=$(sed -e 's/%/%25/g' err.txt | awk '{printf "%s%%0A", $0}')
+          echo "::error title=Ошибка сборки::$msg"
 
       - name: Переименовать
         run: cp build/app/outputs/flutter-apk/app-release.apk ../cashew-local-${{ github.run_number }}.apk
