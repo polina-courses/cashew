@@ -1309,16 +1309,10 @@ double getExpandedHeaderHeight(
   if (expandedHeightPassed != null) return expandedHeightPassed;
   double height = MediaQuery.sizeOf(context).height;
 
-  double minHeaderHeight = getPlatform() == PlatformOS.isIOS
-      ? isHomePageSpace == true
-          ? 0
-          : 100
-      : 110;
-  double maxHeaderHeight = getPlatform() == PlatformOS.isIOS
-      ? isHomePageSpace == true
-          ? 0
-          : 100
-      : 200;
+  // Локальная версия: компактные шапки на всех платформах (как на iOS):
+  // страницы — 100 вместо 110–200, главная — без высокого блока над приветствием
+  double minHeaderHeight = isHomePageSpace == true ? 0 : 100;
+  double maxHeaderHeight = isHomePageSpace == true ? 0 : 100;
 
   if (height >= MAX_HEIGHT_FOR_HEADER &&
       appStateSettings["forceSmallHeader"] != true) {
