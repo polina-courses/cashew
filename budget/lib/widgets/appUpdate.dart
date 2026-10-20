@@ -76,6 +76,31 @@ Future<AppRelease> fetchLatestRelease() async {
   }
 }
 
+/// Прямой адрес файла после перенаправления GitHub (release-assets.githubusercontent.com).
+/// Ссылки github.com на телефоне может перехватить приложение GitHub, и его загрузчик
+/// зависает; конечный адрес файла открывается обычным браузером.
+Future<String?> resolveDownloadUrl(String url) async {
+  HttpClient client = HttpClient()..connectionTimeout = Duration(seconds: 10);
+  try {
+    HttpClientRequest request = await client.getUrl(Uri.parse(url));
+    request.followRedirects = false;
+    request.headers.set(HttpHeaders.userAgentHeader, "cashew-local");
+    HttpClientResponse response =
+        await request.close().timeout(Duration(seconds: 15));
+    String? location = response.headers.value(HttpHeaders.locationHeader);
+    await response.drain();
+    if (response.isRedirect && location != null && location.isNotEmpty) {
+      return location;
+    }
+    return null;
+  } catch (e) {
+    print("Could not resolve download url " + e.toString());
+    return null;
+  } finally {
+    client.close(force: true);
+  }
+}
+
 class AppUpdateSettingsTile extends StatefulWidget {
   const AppUpdateSettingsTile({super.key});
 
@@ -143,7 +168,11 @@ class _AppUpdateSettingsTileState extends State<AppUpdateSettingsTile> {
                 "\nНажмите, чтобы скачать",
             icon: Icons.system_update_rounded,
             onTap: () async {
-              bool opened = await openUrl(release.apkUrl ?? release.pageUrl);
+              String? direct = release.apkUrl == null
+                  ? null
+                  : await resolveDownloadUrl(release.apkUrl!);
+              bool opened =
+                  await openUrl(direct ?? release.apkUrl ?? release.pageUrl);
               if (!opened) await openUrl(release.pageUrl);
             },
           );
