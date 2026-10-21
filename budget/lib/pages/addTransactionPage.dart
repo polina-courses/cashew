@@ -183,6 +183,7 @@ class _AddTransactionPageState extends State<AddTransactionPage>
       setState(() {
         walletHasEnvelopes = envelopeList.isNotEmpty;
         if (selectedEnvelopePk != null &&
+            selectedEnvelopePk != freeMoneyKey &&
             envelopeList.every((e) => e.envelopePk != selectedEnvelopePk)) {
           selectedEnvelopePk = null;
         }
@@ -525,22 +526,34 @@ class _AddTransactionPageState extends State<AddTransactionPage>
         if (selectedPaid && envelopeWallet != null) {
           EnvelopeBalances balances =
               await database.getEnvelopeBalances(selectedWalletPk);
-          double balance = balances.balanceOf(selectedEnvelopePk!);
+          bool fromFree = selectedEnvelopePk == freeMoneyKey;
           Transaction? editing = widget.transaction;
-          if (editing != null &&
-              editing.paid &&
-              editing.envelopeFk == selectedEnvelopePk) {
-            balance -= editing.amount;
+          double balance;
+          if (fromFree) {
+            balance = freeBalanceExcludingEditing(balances, editing);
+          } else {
+            balance = balances.balanceOf(selectedEnvelopePk!);
+            if (editing != null &&
+                editing.paid &&
+                editing.envelopeFk == selectedEnvelopePk) {
+              balance -= editing.amount;
+            }
           }
           double after = balance - (selectedAmount ?? 0).abs();
           if (after < 0) {
-            String envelopeName = balances.envelopes
-                .firstWhere((e) => e.envelopePk == selectedEnvelopePk)
-                .name;
+            String envelopeName = fromFree
+                ? "Свободных"
+                : balances.envelopes
+                    .firstWhere((e) => e.envelopePk == selectedEnvelopePk)
+                    .name;
             bool? confirmed = await openPopup<bool>(
               context,
-              title: "Не хватает денег в «$envelopeName»",
-              description: "После этой траты в подгруппе будет " +
+              title: fromFree
+                  ? "Не хватает свободных денег"
+                  : "Не хватает денег в «$envelopeName»",
+              description: (fromFree
+                      ? "После этой траты свободных останется "
+                      : "После этой траты в подгруппе будет ") +
                   envelopeMoney(context, envelopeWallet, after) +
                   ". Сохранить всё равно?",
               icon: Icons.warning_amber_rounded,
@@ -774,7 +787,9 @@ class _AddTransactionPageState extends State<AddTransactionPage>
       dateTimeModified: null,
       income: selectedIncome,
       walletFk: selectedWalletPk,
-      envelopeFk: needsEnvelope ? selectedEnvelopePk : null,
+      envelopeFk: needsEnvelope && selectedEnvelopePk != freeMoneyKey
+          ? selectedEnvelopePk
+          : null,
       paid: selectedPaid,
       skipPaid: skipPaid,
       type: selectedType,
@@ -866,7 +881,8 @@ class _AddTransactionPageState extends State<AddTransactionPage>
       selectedObjectivePk = widget.transaction!.objectiveFk;
       selectedObjectiveLoanPk = widget.transaction!.objectiveLoanFk;
       selectedExcludedBudgetPks = widget.transaction!.budgetFksExclude ?? [];
-      selectedEnvelopePk = widget.transaction!.envelopeFk;
+      // null у траты со счёта с подгруппами = списано из свободных
+      selectedEnvelopePk = widget.transaction!.envelopeFk ?? freeMoneyKey;
       // var amountString = widget.transaction!.amount.toStringAsFixed(2);
       // if (amountString.substring(amountString.length - 2) == "00") {
       //   selectedAmountCalculation =
@@ -2235,7 +2251,7 @@ class _AddTransactionPageState extends State<AddTransactionPage>
                       : needsEnvelope && selectedEnvelopePk == null
                           ? Button(
                               hasBottomExtraSafeArea: true,
-                              label: "Выбрать подгруппу",
+                              label: "Выбрать, откуда списать",
                               onTap: () async {
                                 TransactionWallet? wallet =
                                     getSelectedWallet(listen: false);

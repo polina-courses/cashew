@@ -1165,7 +1165,7 @@ class SelectEnvelopeChips extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               TextFont(
-                text: "Из подгруппы",
+                text: "Откуда списать",
                 fontSize: 13,
                 textColor: getColor(context, "textLight"),
               ),
@@ -1174,6 +1174,13 @@ class SelectEnvelopeChips extends StatelessWidget {
                 spacing: 6,
                 runSpacing: 6,
                 children: [
+                  // Локальная версия: списать из свободных денег счёта
+                  ChoiceChip(
+                    label: Text("Свободные · " +
+                        envelopeMoney(context, wallet, freeExcludingEditing(data))),
+                    selected: selectedEnvelopePk == freeMoneyKey,
+                    onSelected: (_) => onSelected(freeMoneyKey),
+                  ),
                   for (Envelope envelope in data.envelopes)
                     ChoiceChip(
                       label: Text(envelope.name +
@@ -1195,6 +1202,9 @@ class SelectEnvelopeChips extends StatelessWidget {
     );
   }
 
+  double freeExcludingEditing(EnvelopeBalances data) =>
+      freeBalanceExcludingEditing(data, editingTransaction);
+
   double balanceExcludingEditing(EnvelopeBalances data, Envelope envelope) {
     double balance = data.balanceOf(envelope.envelopePk);
     Transaction? editing = editingTransaction;
@@ -1207,7 +1217,21 @@ class SelectEnvelopeChips extends StatelessWidget {
   }
 }
 
+/// Свободные деньги без учёта редактируемой траты (её сумма уже вычтена из баланса).
+double freeBalanceExcludingEditing(
+    EnvelopeBalances data, Transaction? editing) {
+  double free = data.free;
+  if (editing != null &&
+      editing.paid &&
+      editing.envelopeFk == null &&
+      editing.walletFk == data.walletPk) {
+    free -= editing.amount;
+  }
+  return free;
+}
+
 /// Окно выбора подгруппы — для обязательного выбора перед сохранением траты.
+/// Возвращает envelopePk или freeMoneyKey («Свободные»).
 Future<String?> pickEnvelope(
     BuildContext context, TransactionWallet wallet) async {
   EnvelopeBalances data = await database.getEnvelopeBalances(wallet.walletPk);
@@ -1215,10 +1239,32 @@ Future<String?> pickEnvelope(
   dynamic result = await openBottomSheet(
     context,
     PopupFramework(
-      title: "Из какой подгруппы?",
+      title: "Откуда списать?",
       subtitle: wallet.name,
       child: Column(
         children: [
+          Tappable(
+            color: Colors.transparent,
+            borderRadius: 10,
+            onTap: () => popRoute(context, freeMoneyKey),
+            child: Padding(
+              padding: const EdgeInsetsDirectional.symmetric(
+                  vertical: 12, horizontal: 5),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: TextFont(
+                        text: "Свободные", fontSize: 17, maxLines: 1),
+                  ),
+                  TextFont(
+                    text: envelopeMoney(context, wallet, data.free),
+                    fontSize: 16,
+                    textColor: envelopeAmountColor(context, data.free),
+                  ),
+                ],
+              ),
+            ),
+          ),
           for (Envelope envelope in data.envelopes)
             Tappable(
               color: Colors.transparent,

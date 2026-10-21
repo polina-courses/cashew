@@ -87,6 +87,37 @@ void main() {
     await sub.cancel();
   });
 
+  test('трата из свободных уменьшает свободные, а не подгруппы', () async {
+    await db.createEnvelope(walletPk: "0", name: "Корм", percent: 0);
+    await db.createEnvelope(walletPk: "0", name: "Лекарства", percent: 0);
+    List<Envelope> list = await db.getEnvelopes("0");
+    // Пополнение 10 000: 5 000 на корм, 3 000 на лекарства, 2 000 свободны
+    await db.into(db.transactions).insert(TransactionsCompanion.insert(
+          name: "Пополнение",
+          amount: 10000,
+          note: "",
+          categoryFk: "11",
+          income: Value(true),
+          paid: Value(true),
+        ));
+    await db.distributeToEnvelopes(walletPk: "0", amounts: {
+      list[0].envelopePk: 5000,
+      list[1].envelopePk: 3000,
+    });
+    // Трата 500 из свободных — без подгруппы
+    await db.into(db.transactions).insert(TransactionsCompanion.insert(
+          name: "Трата",
+          amount: -500,
+          note: "",
+          categoryFk: "1",
+          paid: Value(true),
+        ));
+    EnvelopeBalances balances = await db.getEnvelopeBalances("0");
+    expect(balances.balanceOf(list[0].envelopePk), 5000);
+    expect(balances.balanceOf(list[1].envelopePk), 3000);
+    expect(balances.free, 1500);
+  });
+
   test('рекомендуемое пополнение пересчитывается от суммы цели', () {
     DateTime now = DateTime.now();
     DateTime date = DateTime(now.year, now.month, now.day)

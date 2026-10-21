@@ -15,11 +15,13 @@ import 'package:drift/drift.dart';
 
 class EnvelopeBalances {
   EnvelopeBalances({
+    required this.walletPk,
     required this.envelopes,
     required this.balances,
     required this.walletTotal,
   });
 
+  final String walletPk;
   final List<Envelope> envelopes;
   final Map<String, double> balances;
   final double walletTotal;
@@ -218,6 +220,7 @@ extension EnvelopeQueries on FinanceDatabase {
           }
         }
         return EnvelopeBalances(
+          walletPk: walletPk,
           envelopes: envelopeList,
           balances: balances,
           walletTotal: walletTotal,
