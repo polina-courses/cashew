@@ -1163,6 +1163,49 @@ class _DistributeSheetState extends State<DistributeSheet> {
   }
 }
 
+// Подсказки в окне распределения: что уже лежит, сколько нужно и к какому сроку
+Widget envelopeDistributeHint(
+    BuildContext context, TransactionWallet wallet, EnvelopeGoal goal) {
+  List<String> lines = [];
+  if (goal.balance != 0 || goal.hasGoal) {
+    lines.add("Уже в подгруппе: " + envelopeMoney(context, wallet, goal.balance));
+  }
+  if (goal.hasAmount) {
+    lines.add(goal.reached
+        ? "Цель " + envelopeMoney(context, wallet, goal.targetAmount!) + " достигнута"
+        : "Нужно всего " +
+            envelopeMoney(context, wallet, goal.targetAmount!) +
+            ", осталось " +
+            envelopeMoney(context, wallet, goal.remaining));
+  }
+  if (goal.targetDate != null) {
+    lines.add("Срок: до " + envelopeDate(goal.targetDate!));
+  }
+  double? monthly = goal.monthlyRecommended;
+  if (lines.isEmpty && monthly == null) return SizedBox.shrink();
+  return Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      for (String line in lines)
+        TextFont(
+          text: line,
+          fontSize: 12,
+          maxLines: 2,
+          textColor: getColor(context, "textLight"),
+        ),
+      if (monthly != null)
+        TextFont(
+          text: "Откладывать ≈ " +
+              envelopeMoney(context, wallet, monthly) +
+              " в месяц",
+          fontSize: 12,
+          maxLines: 2,
+          textColor: Theme.of(context).colorScheme.primary,
+        ),
+    ],
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Перекладывание между подгруппами
 
