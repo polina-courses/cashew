@@ -547,18 +547,18 @@ void discardChangesPopup(context,
   } else {
     await openPopup(
       context,
-      title: "discard-changes".tr(),
-      description: "discard-changes-description".tr(),
+      title: "Есть несохранённые изменения",
+      description: "Выйти без изменений или вернуться для редактирования?",
       icon: appStateSettings["outlinedIcons"]
           ? Icons.warning_outlined
           : Icons.warning_rounded,
-      onSubmitLabel: "discard".tr(),
+      onSubmitLabel: "Выйти без изменений",
       onSubmit: () async {
         if (onDiscard != null) await onDiscard();
         popRoute(context);
         popRoute(context);
       },
-      onCancelLabel: "cancel".tr(),
+      onCancelLabel: "Вернуться для редактирования",
       onCancel: () {
         popRoute(context);
       },
