@@ -87,6 +87,7 @@ Future<bool> initializeSettings() async {
   await attemptToMigrateSetLongTermLoansAmountTo0();
   attemptToMigrateCustomNumberFormattingSettings();
   localMoveGoalsBelowLoansOnce();
+  localCalendarInNavBarOnce();
 
   // Disable sync every change is not on web
   // It will still sync when user pulls down to refresh
@@ -439,3 +440,17 @@ void localMoveGoalsBelowLoansOnce() {
   appStateSettings["localMovedGoalsBelowLoans"] = true;
 }
 
+
+/// Одноразово: пункт «Бюджет» в нижнем меню заменяем на «Календарь».
+/// Бюджеты остаются доступны в выборе ярлыка меню.
+void localCalendarInNavBarOnce() {
+  if (appStateSettings["localCalendarNavOnce"] == true) return;
+  try {
+    if (appStateSettings["customNavBarShortcut2"] == "budgets") {
+      appStateSettings["customNavBarShortcut2"] = "calendar";
+    }
+  } catch (e) {
+    print("Error setting calendar nav shortcut " + e.toString());
+  }
+  appStateSettings["localCalendarNavOnce"] = true;
+}

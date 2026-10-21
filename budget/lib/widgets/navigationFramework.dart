@@ -7,6 +7,7 @@ import 'package:budget/main.dart';
 import 'package:budget/pages/aboutPage.dart';
 import 'package:budget/pages/accountsPage.dart';
 import 'package:budget/pages/addBudgetPage.dart';
+import 'package:budget/pages/upcomingCalendarPage.dart';
 import 'package:budget/pages/addCategoryPage.dart';
 import 'package:budget/pages/addObjectivePage.dart';
 import 'package:budget/pages/addTransactionPage.dart';
@@ -377,6 +378,7 @@ class PageNavigationFrameworkState extends State<PageNavigationFramework> {
         key: upcomingOverdueTransactionsStateKey,
         overdueTransactions: null), //16
     CreditDebtTransactions(key: creditDebtTransactionsKey, isCredit: null), //17
+    UpcomingCalendarPage(enableBackButton: false), //18
   ];
 
   late int currentPage = widget.widthSideNavigationBar <= 0
@@ -523,7 +525,7 @@ class PageNavigationFrameworkState extends State<PageNavigationFramework> {
                 routesToPopAfterDelete: RoutesToPopAfterDelete.None,
               ),
             ),
-            condition: [0, 1, 2, 14].contains(currentPage),
+            condition: [0, 1, 2, 14, 18].contains(currentPage),
           ),
         ),
       ),

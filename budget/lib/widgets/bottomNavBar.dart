@@ -429,6 +429,10 @@ class SelectNavBarShortcutPopup extends StatelessWidget {
         ),
         NavBarShortcutSelection(
           shortcutAppSettingKey: shortcutAppSettingKey,
+          navBarIconDataKey: "calendar",
+        ),
+        NavBarShortcutSelection(
+          shortcutAppSettingKey: shortcutAppSettingKey,
           navBarIconDataKey: "goals",
           onSettings: () {
             openBottomSheet(
