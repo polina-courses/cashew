@@ -783,6 +783,11 @@ class _DistributeSheetState extends State<DistributeSheet> {
   late double total = roundToDecimals(widget.amount, widget.wallet.decimals);
   bool percentMode = false;
 
+  // Режим «Изменить»: правим уже лежащие в подгруппах суммы
+  bool editMode = false;
+  late Map<String, double> editedBalances;
+  late Map<String, TextEditingController> balanceControllers;
+
   int get decimals => widget.wallet.decimals;
 
   @override
@@ -800,12 +805,25 @@ class _DistributeSheetState extends State<DistributeSheet> {
       controllers[envelope.envelopePk] = TextEditingController();
     }
     fillControllers();
+
+    editedBalances = {};
+    balanceControllers = {};
+    for (Envelope envelope in widget.envelopes) {
+      double current =
+          roundToDecimals(widget.balances.balanceOf(envelope.envelopePk), decimals);
+      editedBalances[envelope.envelopePk] = current;
+      balanceControllers[envelope.envelopePk] = TextEditingController(
+          text: current == 0 ? "" : formatNumberForInput(current, decimals));
+    }
   }
 
   @override
   void dispose() {
     totalController.dispose();
     for (TextEditingController controller in controllers.values) {
+      controller.dispose();
+    }
+    for (TextEditingController controller in balanceControllers.values) {
       controller.dispose();
     }
     super.dispose();
@@ -835,6 +853,14 @@ class _DistributeSheetState extends State<DistributeSheet> {
     });
   }
 
+  void onBalanceChanged(Envelope envelope, String text) {
+    double value = parseEnvelopeNumber(text) ?? 0;
+    setState(() {
+      editedBalances[envelope.envelopePk] =
+          roundToDecimals(value < 0 ? 0 : value, decimals);
+    });
+  }
+
   void onTotalChanged(String text) {
     double newTotal = parseEnvelopeNumber(text) ?? 0;
     setState(() {
@@ -856,6 +882,17 @@ class _DistributeSheetState extends State<DistributeSheet> {
 
   double get remainder => roundToDecimals(total - distributed, decimals);
 
+  // Свободные деньги после правки уже лежащих сумм
+  double get freeAfterEdit {
+    double oldSum = 0;
+    double newSum = 0;
+    for (Envelope envelope in widget.envelopes) {
+      oldSum += widget.balances.balanceOf(envelope.envelopePk);
+      newSum += editedBalances[envelope.envelopePk] ?? 0;
+    }
+    return roundToDecimals(widget.balances.free + oldSum - newSum, decimals);
+  }
+
   Future<void> save() async {
     Map<String, double> cleaned = {};
     for (MapEntry<String, double> entry in amounts.entries) {
@@ -869,8 +906,26 @@ class _DistributeSheetState extends State<DistributeSheet> {
     popRoute(context);
   }
 
+  // Сохраняем правку: разница с прежней суммой уходит из свободных или возвращается в них
+  Future<void> saveEdits() async {
+    for (Envelope envelope in widget.envelopes) {
+      double old = widget.balances.balanceOf(envelope.envelopePk);
+      double delta =
+          roundToDecimals((editedBalances[envelope.envelopePk] ?? old) - old, decimals);
+      if (delta == 0) continue;
+      await database.addEnvelopeMove(
+        walletPk: widget.wallet.walletPk,
+        fromEnvelopePk: delta < 0 ? envelope.envelopePk : null,
+        toEnvelopePk: delta > 0 ? envelope.envelopePk : null,
+        amount: delta.abs(),
+      );
+    }
+    popRoute(context);
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (editMode) return buildEditMode(context);
     bool overDistributed = remainder < 0;
     return PopupFramework(
       title: widget.title,
@@ -878,6 +933,19 @@ class _DistributeSheetState extends State<DistributeSheet> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          SegmentedButton<bool>(
+            segments: [
+              ButtonSegment(value: false, label: Text("Добавить")),
+              ButtonSegment(value: true, label: Text("Изменить уже лежащие")),
+            ],
+            selected: {editMode},
+            onSelectionChanged: (selection) {
+              setState(() {
+                editMode = selection.first;
+              });
+            },
+          ),
+          SizedBox(height: 10),
           TextInput(
             labelText: "Сумма к распределению",
             controller: totalController,
@@ -992,49 +1060,107 @@ class _DistributeSheetState extends State<DistributeSheet> {
       ),
     );
   }
-}
 
-// Подсказки в окне распределения: что уже лежит, сколько нужно и к какому сроку
-Widget envelopeDistributeHint(
-    BuildContext context, TransactionWallet wallet, EnvelopeGoal goal) {
-  List<String> lines = [];
-  if (goal.balance != 0 || goal.hasGoal) {
-    lines.add("Уже в подгруппе: " + envelopeMoney(context, wallet, goal.balance));
+  Widget buildEditMode(BuildContext context) {
+    bool overEdited = freeAfterEdit < 0;
+    return PopupFramework(
+      title: "Изменить распределённые суммы",
+      subtitle: widget.wallet.name,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SegmentedButton<bool>(
+            segments: [
+              ButtonSegment(value: false, label: Text("Добавить")),
+              ButtonSegment(value: true, label: Text("Изменить уже лежащие")),
+            ],
+            selected: {editMode},
+            onSelectionChanged: (selection) {
+              setState(() {
+                editMode = selection.first;
+              });
+            },
+          ),
+          SizedBox(height: 10),
+          for (Envelope envelope in widget.envelopes)
+            Padding(
+              padding: const EdgeInsetsDirectional.only(bottom: 8),
+              child: Row(
+                children: [
+                  Expanded(
+                    flex: 3,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        TextFont(text: envelope.name, fontSize: 16, maxLines: 1),
+                        TextFont(
+                          text: "Сейчас: " +
+                              envelopeMoney(
+                                  context,
+                                  widget.wallet,
+                                  widget.balances
+                                      .balanceOf(envelope.envelopePk)),
+                          fontSize: 12,
+                          textColor: getColor(context, "textLight"),
+                        ),
+                      ],
+                    ),
+                  ),
+                  SizedBox(width: 10),
+                  Expanded(
+                    flex: 2,
+                    child: TextInput(
+                      labelText: "Сумма",
+                      controller: balanceControllers[envelope.envelopePk],
+                      padding: EdgeInsetsDirectional.zero,
+                      keyboardType:
+                          TextInputType.numberWithOptions(decimal: true),
+                      onChanged: (text) => onBalanceChanged(envelope, text),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          SizedBox(height: 5),
+          TextFont(
+            text: overEdited
+                ? "Не хватает свободных денег на " +
+                    envelopeMoney(context, widget.wallet, -freeAfterEdit)
+                : "Останется свободными: " +
+                    envelopeMoney(context, widget.wallet, freeAfterEdit),
+            fontSize: 15,
+            maxLines: 2,
+            textColor: overEdited
+                ? getColor(context, "expenseAmount")
+                : getColor(context, "textLight"),
+          ),
+          SizedBox(height: 15),
+          Row(
+            children: [
+              Expanded(
+                child: Button(
+                  label: "Вернуться без изменений",
+                  expandedLayout: true,
+                  color: Theme.of(context).colorScheme.secondaryContainer,
+                  textColor: Theme.of(context).colorScheme.onSecondaryContainer,
+                  onTap: () => popRoute(context),
+                ),
+              ),
+              SizedBox(width: 8),
+              Expanded(
+                child: Button(
+                  label: "Сохранить суммы",
+                  expandedLayout: true,
+                  disabled: overEdited,
+                  onTap: saveEdits,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
   }
-  if (goal.hasAmount) {
-    lines.add(goal.reached
-        ? "Цель " + envelopeMoney(context, wallet, goal.targetAmount!) + " достигнута"
-        : "Нужно всего " +
-            envelopeMoney(context, wallet, goal.targetAmount!) +
-            ", осталось " +
-            envelopeMoney(context, wallet, goal.remaining));
-  }
-  if (goal.targetDate != null) {
-    lines.add("Срок: до " + envelopeDate(goal.targetDate!));
-  }
-  double? monthly = goal.monthlyRecommended;
-  if (lines.isEmpty && monthly == null) return SizedBox.shrink();
-  return Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      for (String line in lines)
-        TextFont(
-          text: line,
-          fontSize: 12,
-          maxLines: 2,
-          textColor: getColor(context, "textLight"),
-        ),
-      if (monthly != null)
-        TextFont(
-          text: "Откладывать ≈ " +
-              envelopeMoney(context, wallet, monthly) +
-              " в месяц",
-          fontSize: 12,
-          maxLines: 2,
-          textColor: Theme.of(context).colorScheme.primary,
-        ),
-    ],
-  );
 }
 
 // ---------------------------------------------------------------------------
