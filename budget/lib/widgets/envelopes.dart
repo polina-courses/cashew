@@ -845,10 +845,62 @@ class _EnvelopeTableSheetState extends State<EnvelopeTableSheet> {
         : formatNumberForInput(values[envelopePk]!, decimals);
   }
 
+  void setControllerText(String envelopePk, double value) {
+    controllers[envelopePk]!.text =
+        value == 0 ? "" : formatNumberForInput(value, decimals);
+  }
+
+  // Правка суммы одной подгруппы. Прибавка берётся сначала из свободных денег,
+  // остаток — поровну у других подгрупп (кто сколько может отдать). Уменьшение
+  // возвращает деньги в свободные. Сумма всех денег счёта не меняется.
+  void applyNewValue(String envelopePk, double target,
+      {bool updateOwnText = true}) {
+    double current = values[envelopePk] ?? 0;
+    double wanted = roundToDecimals(max(0.0, target), decimals);
+    double delta = roundToDecimals(wanted - current, decimals);
+    if (delta <= 0) {
+      values[envelopePk] = wanted;
+      if (updateOwnText) setControllerText(envelopePk, wanted);
+      return;
+    }
+    double fromFree = min(delta, max(0.0, freeAfter));
+    double need = roundToDecimals(delta - fromFree, decimals);
+    int guard = 0;
+    while (need > 0 && guard < 200) {
+      guard++;
+      List<String> others = values.keys
+          .where((k) => k != envelopePk && (values[k] ?? 0) > 0)
+          .toList();
+      if (others.isEmpty) break;
+      double share = need / others.length;
+      for (String other in others) {
+        double take = min(share, values[other]!);
+        take = roundToDecimals(take, decimals);
+        if (take <= 0) continue;
+        values[other] = roundToDecimals(values[other]! - take, decimals);
+        need = roundToDecimals(need - take, decimals);
+        setControllerText(other, values[other]!);
+      }
+    }
+    double actualDelta = roundToDecimals(delta - max(0.0, need), decimals);
+    values[envelopePk] = roundToDecimals(current + actualDelta, decimals);
+    if (updateOwnText || actualDelta < delta) {
+      setControllerText(envelopePk, values[envelopePk]!);
+    }
+  }
+
   void onChanged(Envelope envelope, String text) {
+    double value = parseEnvelopeNumber(text) ?? 0;
     setState(() {
-      values[envelope.envelopePk] =
-          roundToDecimals(max(0.0, parseEnvelopeNumber(text) ?? 0.0), decimals);
+      applyNewValue(envelope.envelopePk, value, updateOwnText: false);
+    });
+  }
+
+  // Кнопки «+» и «−»: шаг 100
+  void stepValue(Envelope envelope, double step) {
+    setState(() {
+      double current = values[envelope.envelopePk] ?? 0;
+      applyNewValue(envelope.envelopePk, current + step);
     });
   }
 
@@ -999,6 +1051,11 @@ class _EnvelopeTableSheetState extends State<EnvelopeTableSheet> {
                     ),
                   ),
                   SizedBox(width: 10),
+                  IconButton(
+                    tooltip: "Уменьшить на 100",
+                    onPressed: () => stepValue(envelope, -100),
+                    icon: Icon(Icons.remove_rounded),
+                  ),
                   Expanded(
                     flex: 2,
                     child: TextInput(
@@ -1009,6 +1066,11 @@ class _EnvelopeTableSheetState extends State<EnvelopeTableSheet> {
                           TextInputType.numberWithOptions(decimal: true),
                       onChanged: (text) => onChanged(envelope, text),
                     ),
+                  ),
+                  IconButton(
+                    tooltip: "Увеличить на 100",
+                    onPressed: () => stepValue(envelope, 100),
+                    icon: Icon(Icons.add_rounded),
                   ),
                 ],
               ),
