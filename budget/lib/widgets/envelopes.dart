@@ -1,5 +1,6 @@
 // Локальная версия: подгруппы счёта («конверты») — интерфейс.
 
+import 'dart:math';
 import 'package:budget/colors.dart';
 import 'package:budget/database/envelopes.dart';
 import 'package:budget/database/tables.dart';
@@ -355,38 +356,9 @@ class _EnvelopesList extends StatelessWidget {
             ),
           ),
         SizedBox(height: 10),
-        Row(
-          children: [
-            Expanded(
-              child: Button(
-                label: "Распределить",
-                expandedLayout: true,
-                onTap: () => openDistributeSheet(
-                  context,
-                  wallet: wallet,
-                  amount: data.free > 0 ? data.free : 0,
-                  title: "Распределить свободные",
-                ),
-              ),
-            ),
-            SizedBox(width: 8),
-            Expanded(
-              child: Button(
-                label: "Переложить",
-                expandedLayout: true,
-                color: Theme.of(context).colorScheme.secondaryContainer,
-                textColor: Theme.of(context).colorScheme.onSecondaryContainer,
-                onTap: () => openEnvelopeTransferSheet(context, wallet: wallet),
-              ),
-            ),
-          ],
-        ),
-        SizedBox(height: 8),
         Button(
-          label: "Изменить суммы подгрупп",
+          label: "Подгруппы: распределить, переложить, изменить",
           expandedLayout: true,
-          color: Theme.of(context).colorScheme.secondaryContainer,
-          textColor: Theme.of(context).colorScheme.onSecondaryContainer,
           onTap: () => openEnvelopeTableSheet(context, wallet: wallet),
         ),
       ],
@@ -736,418 +708,6 @@ class _EnvelopeEditorState extends State<EnvelopeEditor> {
 // ---------------------------------------------------------------------------
 // Распределение денег по подгруппам (пополнение или свободный остаток)
 
-Future openDistributeSheet(
-  BuildContext context, {
-  required TransactionWallet wallet,
-  required double amount,
-  String? sourceTransactionPk,
-  String title = "Распределить пополнение",
-}) async {
-  EnvelopeBalances balances =
-      await database.getEnvelopeBalances(wallet.walletPk);
-  List<Envelope> envelopeList = balances.envelopes;
-  if (envelopeList.isEmpty) return;
-  return openBottomSheet(
-    context,
-    DistributeSheet(
-      wallet: wallet,
-      envelopes: envelopeList,
-      balances: balances,
-      amount: amount,
-      sourceTransactionPk: sourceTransactionPk,
-      title: title,
-    ),
-    popupWithKeyboard: false,
-    fullSnap: true,
-  );
-}
-
-class DistributeSheet extends StatefulWidget {
-  const DistributeSheet({
-    required this.wallet,
-    required this.envelopes,
-    required this.balances,
-    required this.amount,
-    required this.sourceTransactionPk,
-    required this.title,
-    super.key,
-  });
-  final TransactionWallet wallet;
-  final List<Envelope> envelopes;
-  final EnvelopeBalances balances;
-  final double amount;
-  final String? sourceTransactionPk;
-  final String title;
-
-  @override
-  State<DistributeSheet> createState() => _DistributeSheetState();
-}
-
-class _DistributeSheetState extends State<DistributeSheet> {
-  // Суммы храним всегда в деньгах; в режиме % поля показывают долю от суммы
-  late Map<String, double> amounts;
-  late Map<String, TextEditingController> controllers;
-  late TextEditingController totalController;
-  late double total = roundToDecimals(widget.amount, widget.wallet.decimals);
-  bool percentMode = false;
-
-  // Режим «Изменить»: правим уже лежащие в подгруппах суммы
-  bool editMode = false;
-  late Map<String, double> editedBalances;
-  late Map<String, TextEditingController> balanceControllers;
-
-  int get decimals => widget.wallet.decimals;
-
-  @override
-  void initState() {
-    super.initState();
-    totalController =
-        TextEditingController(text: formatNumberForInput(total, decimals));
-    amounts = {};
-    for (Envelope envelope in widget.envelopes) {
-      amounts[envelope.envelopePk] =
-          roundToDecimals(total * envelope.percent / 100, decimals);
-    }
-    controllers = {};
-    for (Envelope envelope in widget.envelopes) {
-      controllers[envelope.envelopePk] = TextEditingController();
-    }
-    fillControllers();
-
-    editedBalances = {};
-    balanceControllers = {};
-    for (Envelope envelope in widget.envelopes) {
-      double current =
-          roundToDecimals(widget.balances.balanceOf(envelope.envelopePk), decimals);
-      editedBalances[envelope.envelopePk] = current;
-      balanceControllers[envelope.envelopePk] = TextEditingController(
-          text: current == 0 ? "" : formatNumberForInput(current, decimals));
-    }
-  }
-
-  @override
-  void dispose() {
-    totalController.dispose();
-    for (TextEditingController controller in controllers.values) {
-      controller.dispose();
-    }
-    for (TextEditingController controller in balanceControllers.values) {
-      controller.dispose();
-    }
-    super.dispose();
-  }
-
-  void fillControllers() {
-    for (Envelope envelope in widget.envelopes) {
-      double value = amounts[envelope.envelopePk] ?? 0;
-      String text;
-      if (percentMode) {
-        text = total == 0
-            ? ""
-            : formatNumberForInput(value / total * 100, 1);
-      } else {
-        text = value == 0 ? "" : formatNumberForInput(value, decimals);
-      }
-      controllers[envelope.envelopePk]!.text = text;
-    }
-  }
-
-  void onFieldChanged(Envelope envelope, String text) {
-    double value = parseEnvelopeNumber(text) ?? 0;
-    setState(() {
-      amounts[envelope.envelopePk] = percentMode
-          ? roundToDecimals(total * value / 100, decimals)
-          : value;
-    });
-  }
-
-  void onBalanceChanged(Envelope envelope, String text) {
-    double value = parseEnvelopeNumber(text) ?? 0;
-    setState(() {
-      editedBalances[envelope.envelopePk] =
-          roundToDecimals(value < 0 ? 0 : value, decimals);
-    });
-  }
-
-  void onTotalChanged(String text) {
-    double newTotal = parseEnvelopeNumber(text) ?? 0;
-    setState(() {
-      // При смене суммы пересчитываем по долям по умолчанию
-      total = newTotal;
-      for (Envelope envelope in widget.envelopes) {
-        amounts[envelope.envelopePk] =
-            roundToDecimals(total * envelope.percent / 100, decimals);
-      }
-      fillControllers();
-    });
-  }
-
-  double get distributed {
-    double sum = 0;
-    for (double value in amounts.values) sum += value;
-    return sum;
-  }
-
-  double get remainder => roundToDecimals(total - distributed, decimals);
-
-  // Свободные деньги после правки уже лежащих сумм
-  double get freeAfterEdit {
-    double oldSum = 0;
-    double newSum = 0;
-    for (Envelope envelope in widget.envelopes) {
-      oldSum += widget.balances.balanceOf(envelope.envelopePk);
-      newSum += editedBalances[envelope.envelopePk] ?? 0;
-    }
-    return roundToDecimals(widget.balances.free + oldSum - newSum, decimals);
-  }
-
-  Future<void> save() async {
-    Map<String, double> cleaned = {};
-    for (MapEntry<String, double> entry in amounts.entries) {
-      if (entry.value != 0) cleaned[entry.key] = entry.value;
-    }
-    await database.distributeToEnvelopes(
-      walletPk: widget.wallet.walletPk,
-      amounts: cleaned,
-      sourceTransactionPk: widget.sourceTransactionPk,
-    );
-    popRoute(context);
-  }
-
-  // Сохраняем правку: разница с прежней суммой уходит из свободных или возвращается в них
-  Future<void> saveEdits() async {
-    for (Envelope envelope in widget.envelopes) {
-      double old = widget.balances.balanceOf(envelope.envelopePk);
-      double delta =
-          roundToDecimals((editedBalances[envelope.envelopePk] ?? old) - old, decimals);
-      if (delta == 0) continue;
-      await database.addEnvelopeMove(
-        walletPk: widget.wallet.walletPk,
-        fromEnvelopePk: delta < 0 ? envelope.envelopePk : null,
-        toEnvelopePk: delta > 0 ? envelope.envelopePk : null,
-        amount: delta.abs(),
-      );
-    }
-    popRoute(context);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    bool overFree = total > widget.balances.free + 0.0001;
-    bool overDistributed = remainder < 0 || overFree;
-    return PopupFramework(
-      title: widget.title,
-      subtitle: widget.wallet.name,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          TextInput(
-            labelText: "Сумма к распределению",
-            controller: totalController,
-            padding: EdgeInsetsDirectional.zero,
-            keyboardType: TextInputType.numberWithOptions(decimal: true),
-            onChanged: onTotalChanged,
-          ),
-          SizedBox(height: 10),
-          SegmentedButton<bool>(
-            segments: [
-              ButtonSegment(value: false, label: Text("В деньгах")),
-              ButtonSegment(value: true, label: Text("В процентах")),
-            ],
-            selected: {percentMode},
-            onSelectionChanged: (selection) {
-              setState(() {
-                percentMode = selection.first;
-                fillControllers();
-              });
-            },
-          ),
-          SizedBox(height: 10),
-          for (Envelope envelope in widget.envelopes)
-            Padding(
-              padding: const EdgeInsetsDirectional.only(bottom: 8),
-              child: Row(
-                children: [
-                  Expanded(
-                    flex: 3,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        TextFont(text: envelope.name, fontSize: 16, maxLines: 1),
-                        TextFont(
-                          text: percentMode
-                              ? envelopeMoney(context, widget.wallet,
-                                  amounts[envelope.envelopePk] ?? 0)
-                              : (total == 0
-                                  ? ""
-                                  : formatNumberForInput(
-                                          (amounts[envelope.envelopePk] ?? 0) /
-                                              total *
-                                              100,
-                                          1) +
-                                      "%"),
-                          fontSize: 12,
-                          textColor: getColor(context, "textLight"),
-                        ),
-                        envelopeDistributeHint(
-                          context,
-                          widget.wallet,
-                          envelopeGoalOf(
-                            envelope,
-                            widget.balances.balanceOf(envelope.envelopePk),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  SizedBox(width: 10),
-                  Expanded(
-                    flex: 2,
-                    child: TextInput(
-                      labelText: percentMode ? "%" : "Сумма",
-                      controller: controllers[envelope.envelopePk],
-                      padding: EdgeInsetsDirectional.zero,
-                      keyboardType:
-                          TextInputType.numberWithOptions(decimal: true),
-                      onChanged: (text) => onFieldChanged(envelope, text),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          SizedBox(height: 5),
-          TextFont(
-            text: overFree
-                ? "Свободных денег только " +
-                    envelopeMoney(context, widget.wallet, widget.balances.free)
-                : overDistributed
-                ? "Распределено больше суммы на " +
-                    envelopeMoney(context, widget.wallet, -remainder)
-                : "Останется свободными: " +
-                    envelopeMoney(context, widget.wallet, remainder),
-            fontSize: 15,
-            maxLines: 2,
-            textColor: overDistributed
-                ? getColor(context, "expenseAmount")
-                : getColor(context, "textLight"),
-          ),
-          SizedBox(height: 15),
-          Row(
-            children: [
-              Expanded(
-                child: Button(
-                  label: "Не распределять",
-                  expandedLayout: true,
-                  color: Theme.of(context).colorScheme.secondaryContainer,
-                  textColor: Theme.of(context).colorScheme.onSecondaryContainer,
-                  onTap: () => popRoute(context),
-                ),
-              ),
-              SizedBox(width: 8),
-              Expanded(
-                child: Button(
-                  label: "Распределить",
-                  expandedLayout: true,
-                  disabled: overDistributed,
-                  onTap: save,
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget buildEditMode(BuildContext context) {
-    bool overEdited = freeAfterEdit < 0;
-    return PopupFramework(
-      title: "Изменить распределённые суммы",
-      subtitle: widget.wallet.name,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          for (Envelope envelope in widget.envelopes)
-            Padding(
-              padding: const EdgeInsetsDirectional.only(bottom: 8),
-              child: Row(
-                children: [
-                  Expanded(
-                    flex: 3,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        TextFont(text: envelope.name, fontSize: 16, maxLines: 1),
-                        TextFont(
-                          text: "Сейчас: " +
-                              envelopeMoney(
-                                  context,
-                                  widget.wallet,
-                                  widget.balances
-                                      .balanceOf(envelope.envelopePk)),
-                          fontSize: 12,
-                          textColor: getColor(context, "textLight"),
-                        ),
-                      ],
-                    ),
-                  ),
-                  SizedBox(width: 10),
-                  Expanded(
-                    flex: 2,
-                    child: TextInput(
-                      labelText: "Сумма",
-                      controller: balanceControllers[envelope.envelopePk],
-                      padding: EdgeInsetsDirectional.zero,
-                      keyboardType:
-                          TextInputType.numberWithOptions(decimal: true),
-                      onChanged: (text) => onBalanceChanged(envelope, text),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          SizedBox(height: 5),
-          TextFont(
-            text: overEdited
-                ? "Не хватает свободных денег на " +
-                    envelopeMoney(context, widget.wallet, -freeAfterEdit)
-                : "Останется свободными: " +
-                    envelopeMoney(context, widget.wallet, freeAfterEdit),
-            fontSize: 15,
-            maxLines: 2,
-            textColor: overEdited
-                ? getColor(context, "expenseAmount")
-                : getColor(context, "textLight"),
-          ),
-          SizedBox(height: 15),
-          Row(
-            children: [
-              Expanded(
-                child: Button(
-                  label: "Вернуться без изменений",
-                  expandedLayout: true,
-                  color: Theme.of(context).colorScheme.secondaryContainer,
-                  textColor: Theme.of(context).colorScheme.onSecondaryContainer,
-                  onTap: () => popRoute(context),
-                ),
-              ),
-              SizedBox(width: 8),
-              Expanded(
-                child: Button(
-                  label: "Сохранить суммы",
-                  expandedLayout: true,
-                  disabled: overEdited,
-                  onTap: saveEdits,
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 // Подсказки в окне распределения: что уже лежит, сколько нужно и к какому сроку
 Widget envelopeDistributeHint(
     BuildContext context, TransactionWallet wallet, EnvelopeGoal goal) {
@@ -1192,18 +752,42 @@ Widget envelopeDistributeHint(
 }
 
 // ---------------------------------------------------------------------------
-// Таблица подгрупп: правка уже лежащих сумм
+// Единое окно подгрупп: распределить свободные, переложить, изменить суммы
 
+// Открывает таблицу подгрупп счёта. После пополнения передаём сумму пополнения.
 Future openEnvelopeTableSheet(BuildContext context,
-    {required TransactionWallet wallet}) async {
+    {required TransactionWallet wallet,
+    double? incomeAmount,
+    String? sourceTransactionPk}) async {
   EnvelopeBalances balances =
       await database.getEnvelopeBalances(wallet.walletPk);
   if (balances.envelopes.isEmpty) return;
   return openBottomSheet(
     context,
-    EnvelopeTableSheet(wallet: wallet, balances: balances),
+    EnvelopeTableSheet(
+      wallet: wallet,
+      balances: balances,
+      incomeAmount: incomeAmount,
+      sourceTransactionPk: sourceTransactionPk,
+    ),
     popupWithKeyboard: true,
     fullSnap: true,
+  );
+}
+
+// Совместимость: окно после пополнения счёта
+Future openDistributeSheet(
+  BuildContext context, {
+  required TransactionWallet wallet,
+  required double amount,
+  String? sourceTransactionPk,
+  String title = "Распределить пополнение",
+}) {
+  return openEnvelopeTableSheet(
+    context,
+    wallet: wallet,
+    incomeAmount: amount,
+    sourceTransactionPk: sourceTransactionPk,
   );
 }
 
@@ -1211,10 +795,14 @@ class EnvelopeTableSheet extends StatefulWidget {
   const EnvelopeTableSheet({
     required this.wallet,
     required this.balances,
+    this.incomeAmount,
+    this.sourceTransactionPk,
     super.key,
   });
   final TransactionWallet wallet;
   final EnvelopeBalances balances;
+  final double? incomeAmount;
+  final String? sourceTransactionPk;
 
   @override
   State<EnvelopeTableSheet> createState() => _EnvelopeTableSheetState();
@@ -1226,14 +814,16 @@ class _EnvelopeTableSheetState extends State<EnvelopeTableSheet> {
 
   int get decimals => widget.wallet.decimals;
 
+  double oldOf(Envelope envelope) =>
+      roundToDecimals(widget.balances.balanceOf(envelope.envelopePk), decimals);
+
   @override
   void initState() {
     super.initState();
     values = {};
     controllers = {};
     for (Envelope envelope in widget.balances.envelopes) {
-      double current = roundToDecimals(
-          widget.balances.balanceOf(envelope.envelopePk), decimals);
+      double current = oldOf(envelope);
       values[envelope.envelopePk] = current;
       controllers[envelope.envelopePk] = TextEditingController(
           text: current == 0 ? "" : formatNumberForInput(current, decimals));
@@ -1248,11 +838,28 @@ class _EnvelopeTableSheetState extends State<EnvelopeTableSheet> {
     super.dispose();
   }
 
+  void setValue(String envelopePk, double value) {
+    values[envelopePk] = roundToDecimals(value < 0 ? 0.0 : value, decimals);
+    controllers[envelopePk]!.text = values[envelopePk] == 0
+        ? ""
+        : formatNumberForInput(values[envelopePk]!, decimals);
+  }
+
   void onChanged(Envelope envelope, String text) {
-    double value = parseEnvelopeNumber(text) ?? 0;
     setState(() {
       values[envelope.envelopePk] =
-          roundToDecimals(value < 0 ? 0 : value, decimals);
+          roundToDecimals(max(0.0, parseEnvelopeNumber(text) ?? 0.0), decimals);
+    });
+  }
+
+  // Заполнить свободные деньги по долям подгрупп
+  void fillByPercent() {
+    setState(() {
+      double free = widget.balances.free;
+      for (Envelope envelope in widget.balances.envelopes) {
+        setValue(envelope.envelopePk,
+            oldOf(envelope) + free * envelope.percent / 100);
+      }
     });
   }
 
@@ -1261,7 +868,7 @@ class _EnvelopeTableSheetState extends State<EnvelopeTableSheet> {
     double oldSum = 0;
     double newSum = 0;
     for (Envelope envelope in widget.balances.envelopes) {
-      oldSum += widget.balances.balanceOf(envelope.envelopePk);
+      oldSum += oldOf(envelope);
       newSum += values[envelope.envelopePk] ?? 0;
     }
     return roundToDecimals(widget.balances.free + oldSum - newSum, decimals);
@@ -1269,26 +876,58 @@ class _EnvelopeTableSheetState extends State<EnvelopeTableSheet> {
 
   bool get hasChanges {
     for (Envelope envelope in widget.balances.envelopes) {
-      double old = roundToDecimals(
-          widget.balances.balanceOf(envelope.envelopePk), decimals);
-      if ((values[envelope.envelopePk] ?? 0) != old) return true;
+      if ((values[envelope.envelopePk] ?? 0) != oldOf(envelope)) return true;
     }
     return false;
   }
 
+  // Изменения раскладываем на перемещения: сначала уменьшенные подгруппы отдают деньги
+  // увеличенным (переложить), остаток берётся из свободных или возвращается в них.
   Future<void> save() async {
-    if (freeAfter < 0) return;
+    if (freeAfter < 0 || !hasChanges) return;
+    Map<String, double> take = {};
+    Map<String, double> give = {};
     for (Envelope envelope in widget.balances.envelopes) {
-      double old = roundToDecimals(
-          widget.balances.balanceOf(envelope.envelopePk), decimals);
-      double delta =
-          roundToDecimals((values[envelope.envelopePk] ?? old) - old, decimals);
-      if (delta == 0) continue;
+      double delta = roundToDecimals(
+          (values[envelope.envelopePk] ?? 0) - oldOf(envelope), decimals);
+      if (delta < 0) take[envelope.envelopePk] = -delta;
+      if (delta > 0) give[envelope.envelopePk] = delta;
+    }
+    for (MapEntry<String, double> receiver in give.entries) {
+      double need = receiver.value;
+      for (MapEntry<String, double> source in take.entries) {
+        if (need <= 0) break;
+        double available = source.value;
+        if (available <= 0) continue;
+        double moved = min(need, available);
+        await database.addEnvelopeMove(
+          walletPk: widget.wallet.walletPk,
+          fromEnvelopePk: source.key,
+          toEnvelopePk: receiver.key,
+          amount: moved,
+        );
+        take[source.key] = roundToDecimals(available - moved, decimals);
+        need = roundToDecimals(need - moved, decimals);
+      }
+      if (need > 0) {
+        // Остаток — из свободных денег (пополнение или новые деньги)
+        await database.addEnvelopeMove(
+          walletPk: widget.wallet.walletPk,
+          fromEnvelopePk: null,
+          toEnvelopePk: receiver.key,
+          amount: need,
+          sourceTransactionPk: widget.sourceTransactionPk,
+        );
+      }
+    }
+    for (MapEntry<String, double> leftover in take.entries) {
+      if (leftover.value <= 0) continue;
+      // Остаток, который не ушёл в другие подгруппы, возвращаем в свободные
       await database.addEnvelopeMove(
         walletPk: widget.wallet.walletPk,
-        fromEnvelopePk: delta < 0 ? envelope.envelopePk : null,
-        toEnvelopePk: delta > 0 ? envelope.envelopePk : null,
-        amount: delta.abs(),
+        fromEnvelopePk: leftover.key,
+        toEnvelopePk: null,
+        amount: leftover.value,
       );
     }
     popRoute(context);
@@ -1296,13 +935,34 @@ class _EnvelopeTableSheetState extends State<EnvelopeTableSheet> {
 
   @override
   Widget build(BuildContext context) {
-    bool overFreeAfter = freeAfter < 0;
+    bool overFree = freeAfter < 0;
+    bool hasPercents = widget.balances.envelopes.any((e) => e.percent > 0);
     return PopupFramework(
-      title: "Суммы подгрупп",
+      title: widget.incomeAmount != null
+          ? "Пополнение " +
+              envelopeMoney(context, widget.wallet, widget.incomeAmount!)
+          : "Подгруппы счёта",
       subtitle: widget.wallet.name,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          TextFont(
+            text: "Свободно сейчас: " +
+                envelopeMoney(context, widget.wallet, widget.balances.free),
+            fontSize: 14,
+            textColor: getColor(context, "textLight"),
+          ),
+          if (hasPercents) ...[
+            SizedBox(height: 8),
+            Button(
+              label: "Заполнить по долям",
+              expandedLayout: true,
+              color: Theme.of(context).colorScheme.secondaryContainer,
+              textColor: Theme.of(context).colorScheme.onSecondaryContainer,
+              onTap: fillByPercent,
+            ),
+          ],
+          SizedBox(height: 10),
           for (Envelope envelope in widget.balances.envelopes)
             Padding(
               padding: const EdgeInsetsDirectional.only(bottom: 8),
@@ -1317,13 +977,24 @@ class _EnvelopeTableSheetState extends State<EnvelopeTableSheet> {
                         TextFont(
                           text: "Сейчас: " +
                               envelopeMoney(
-                                  context,
-                                  widget.wallet,
-                                  widget.balances
-                                      .balanceOf(envelope.envelopePk)),
+                                  context, widget.wallet, oldOf(envelope)),
                           fontSize: 12,
                           textColor: getColor(context, "textLight"),
                         ),
+                        if (envelopeGoalProgressText(
+                                context,
+                                widget.wallet,
+                                envelopeGoalOf(envelope, oldOf(envelope))) !=
+                            null)
+                          TextFont(
+                            text: envelopeGoalProgressText(
+                                context,
+                                widget.wallet,
+                                envelopeGoalOf(envelope, oldOf(envelope)))!,
+                            fontSize: 12,
+                            maxLines: 2,
+                            textColor: getColor(context, "textLight"),
+                          ),
                       ],
                     ),
                   ),
@@ -1344,14 +1015,14 @@ class _EnvelopeTableSheetState extends State<EnvelopeTableSheet> {
             ),
           SizedBox(height: 5),
           TextFont(
-            text: overFreeAfter
+            text: overFree
                 ? "Не хватает свободных денег на " +
                     envelopeMoney(context, widget.wallet, -freeAfter)
                 : "Останется свободными: " +
                     envelopeMoney(context, widget.wallet, freeAfter),
             fontSize: 15,
             maxLines: 2,
-            textColor: overFreeAfter
+            textColor: overFree
                 ? getColor(context, "expenseAmount")
                 : getColor(context, "textLight"),
           ),
@@ -1370,9 +1041,9 @@ class _EnvelopeTableSheetState extends State<EnvelopeTableSheet> {
               SizedBox(width: 8),
               Expanded(
                 child: Button(
-                  label: "Сохранить суммы",
+                  label: "Сохранить",
                   expandedLayout: true,
-                  disabled: overFreeAfter || !hasChanges,
+                  disabled: overFree || !hasChanges,
                   onTap: save,
                 ),
               ),
