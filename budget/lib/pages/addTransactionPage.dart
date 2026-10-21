@@ -168,6 +168,8 @@ class _AddTransactionPageState extends State<AddTransactionPage>
 
   // Локальная версия: подгруппы счёта
   String? selectedEnvelopePk;
+  // Локальная версия: погашение кредита без источника (внесли наличкой, оплатил другой человек)
+  bool loanWithoutSource = false;
   bool walletHasEnvelopes = false;
   StreamSubscription<List<Envelope>>? envelopesSubscription;
   String? envelopesSubscribedWalletPk;
@@ -195,7 +197,8 @@ class _AddTransactionPageState extends State<AddTransactionPage>
   bool get needsEnvelope =>
       walletHasEnvelopes &&
       selectedIncome == false &&
-      selectedCategory?.categoryPk != "0";
+      selectedCategory?.categoryPk != "0" &&
+      !isAddedToLoanObjective;
 
   void setSelectedEnvelopePk(String? envelopePk) {
     setState(() {
@@ -572,6 +575,11 @@ class _AddTransactionPageState extends State<AddTransactionPage>
         selectedCategory = await getOrCreateIncomeNoCategory();
         selectedSubCategory = null;
       }
+      // Локальная версия: погашение кредита/долга не требует категории
+      if (selectedCategory == null && isAddedToLoanObjective) {
+        selectedCategory = await getOrCreateLoanPaymentCategory();
+        selectedSubCategory = null;
+      }
 
       Transaction createdTransaction = await createTransaction();
 
@@ -661,6 +669,25 @@ class _AddTransactionPageState extends State<AddTransactionPage>
         createdTransaction,
         originalTransaction: widget.transaction,
       );
+
+      // Локальная версия: погашение без источника — деньги пришли «извне» и сразу ушли
+      // в погашение, поэтому баланс счёта не меняется, а долг уменьшается.
+      if (widget.transaction == null &&
+          isAddedToLoanObjective &&
+          loanWithoutSource) {
+        await database.createOrUpdateTransaction(
+          createdTransaction.copyWith(
+            transactionPk: "-1",
+            name: "Без источника: " + createdTransaction.name,
+            income: !createdTransaction.income,
+            amount: createdTransaction.amount * -1,
+            objectiveLoanFk: Value(null),
+            objectiveFk: Value(null),
+            envelopeFk: Value(null),
+          ),
+          insert: true,
+        );
+      }
 
       if (rowId != null) {
         final Transaction transactionJustAdded =
@@ -1604,11 +1631,21 @@ class _AddTransactionPageState extends State<AddTransactionPage>
                         ),
                       ),
                     ),
-              SelectAddedBudget(
-                selectedBudgetPk: selectedBudgetPk,
-                setSelectedBudget: setSelectedBudgetPk,
-                horizontalBreak: true,
-              ),
+              if (isAddedToLoanObjective)
+                LoanSourceChooser(
+                  withoutSource: loanWithoutSource,
+                  onChanged: (value) {
+                    setState(() {
+                      loanWithoutSource = value;
+                    });
+                  },
+                ),
+              if (isAddedToLoanObjective == false)
+                SelectAddedBudget(
+                  selectedBudgetPk: selectedBudgetPk,
+                  setSelectedBudget: setSelectedBudgetPk,
+                  horizontalBreak: true,
+                ),
               AnimatedExpanded(
                 axis: Axis.vertical,
                 expand: isAddedToLoanObjective == false,
@@ -1701,7 +1738,9 @@ class _AddTransactionPageState extends State<AddTransactionPage>
                     ],
                   )),
               AnimatedSizeSwitcher(
-                child: showMoreOptions == false
+                child: isAddedToLoanObjective
+                    ? SizedBox.shrink()
+                    : showMoreOptions == false
                     ? Padding(
                         padding: const EdgeInsetsDirectional.only(top: 5),
                         child: LowKeyButton(
@@ -2232,7 +2271,9 @@ class _AddTransactionPageState extends State<AddTransactionPage>
               children: [
                 Expanded(
                   // Локальная версия: для дохода категория необязательна
-                  child: selectedCategory == null && selectedIncome == false
+                  child: selectedCategory == null &&
+                          selectedIncome == false &&
+                          !isAddedToLoanObjective
                       ? Button(
                           hasBottomExtraSafeArea: true,
                           label: "select-category".tr(),
@@ -5378,6 +5419,61 @@ class _TitleInputState extends State<TitleInput> {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+
+// Локальная версия: служебная категория для погашения кредитов и долгов.
+// Нужна только чтобы база ссылалась на категорию; такие записи не входят в расходы.
+const String loanPaymentCategoryPk = "loan-payment-category";
+
+Future<TransactionCategory> getOrCreateLoanPaymentCategory() async {
+  TransactionCategory? existing =
+      await database.getCategoryInstanceOrNull(loanPaymentCategoryPk);
+  if (existing != null) return existing;
+  int order = await database.getAmountOfCategories();
+  await database.createOrUpdateCategory(
+    TransactionCategory(
+      categoryPk: loanPaymentCategoryPk,
+      name: "Погашение кредитов и долгов",
+      colour: toHexString(Colors.blueGrey.shade300),
+      iconName: "coin.png",
+      dateCreated: DateTime.now(),
+      dateTimeModified: null,
+      order: order,
+      income: false,
+    ),
+    updateSharedEntry: false,
+  );
+  return await database.getCategoryInstance(loanPaymentCategoryPk);
+}
+
+// Локальная версия: переключатель источника погашения кредита.
+class LoanSourceChooser extends StatelessWidget {
+  const LoanSourceChooser({
+    required this.withoutSource,
+    required this.onChanged,
+    super.key,
+  });
+  final bool withoutSource;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsetsDirectional.symmetric(horizontal: 22, vertical: 8),
+      child: SegmentedButton<bool>(
+        showSelectedIcon: false,
+        segments: [
+          ButtonSegment<bool>(value: false, label: Text("Со счёта")),
+          ButtonSegment<bool>(value: true, label: Text("Без источника")),
+        ],
+        selected: {withoutSource},
+        onSelectionChanged: (Set<bool> selection) {
+          onChanged(selection.first);
+        },
       ),
     );
   }
