@@ -107,6 +107,7 @@ class AddTransactionPage extends StatefulWidget {
     this.selectedNotes,
     this.startInitialAddTransactionSequence = true,
     this.transferBalancePopup = false,
+    this.skipCategoryStepForIncome = false,
     required this.routesToPopAfterDelete,
   }) : super(key: key);
 
@@ -127,6 +128,8 @@ class AddTransactionPage extends StatefulWidget {
   final String? selectedNotes;
   final bool startInitialAddTransactionSequence;
   final bool transferBalancePopup;
+  // Локальная версия: для дохода не спрашиваем источник (будет «Без категории»)
+  final bool skipCategoryStepForIncome;
 
   @override
   _AddTransactionPageState createState() => _AddTransactionPageState();
@@ -937,33 +940,8 @@ class _AddTransactionPageState extends State<AddTransactionPage>
         }
         await premiumPopupAddTransaction(context);
         if (widget.startInitialAddTransactionSequence == false) return;
-        if (appStateSettings["askForTransactionTitle"]) {
-          openBottomSheet(
-            context,
-            // Only allow full snap when entering a title
-            popupWithKeyboard: true,
-            SelectTitle(
-              selectedTitle: selectedTitle,
-              setSelectedNote: setSelectedNoteController,
-              setSelectedTitle: setSelectedTitleController,
-              setSelectedCategory: setSelectedCategory,
-              setSelectedSubCategory: setSelectedSubCategory,
-              next: () {
-                afterSetTitle();
-              },
-              noteInputController: _noteInputController,
-              setSelectedNoteController: setSelectedNoteController,
-              setSelectedDateTime: (DateTime date) {
-                setState(() {
-                  selectedDate = date;
-                });
-              },
-              selectedDate: widget.selectedDate,
-            ),
-          );
-        } else {
-          afterSetTitle();
-        }
+        // Локальная версия: заголовка нет, сразу переходим к выбору категории/суммы
+        afterSetTitle();
       });
     }
     if (widget.selectedBudget != null) {
@@ -1057,6 +1035,19 @@ class _AddTransactionPageState extends State<AddTransactionPage>
   }
 
   Future afterSetTitle() async {
+    if (widget.skipCategoryStepForIncome &&
+        selectedIncome == true &&
+        selectedCategory == null) {
+      selectAmountPopup(
+        next: () async {
+          await addTransaction();
+          popRoute(context);
+          popRoute(context);
+        },
+        nextLabel: textAddTransaction,
+      );
+      return;
+    }
     MainAndSubcategory mainAndSubcategory = await selectCategorySequence(
       context,
       selectedCategory: selectedCategory,
@@ -1225,17 +1216,6 @@ class _AddTransactionPageState extends State<AddTransactionPage>
         enableDoubleColumn(context)
             ? Container(height: 20)
             : Container(height: 10),
-        TitleInput(
-          clearWhenUnfocused: true,
-          tryToCompleteSearch: true,
-          setSelectedTitle: (title) {
-            setSelectedTitle(title, setInput: false);
-          },
-          titleInputController: _titleInputController,
-          setSelectedCategory: setSelectedCategory,
-          setSelectedSubCategory: setSelectedSubCategory,
-        ),
-        Container(height: 14),
         Padding(
           padding: const EdgeInsetsDirectional.symmetric(horizontal: 22),
           child: TransactionNotesTextInput(
@@ -4579,7 +4559,7 @@ class _TransactionNotesTextInputState extends State<TransactionNotesTextInput> {
               handleOnTapOutside: false,
               borderRadius: BorderRadius.zero,
               padding: EdgeInsetsDirectional.zero,
-              labelText: "notes-placeholder".tr(),
+              labelText: "Комментарий (необязательно)",
               icon: appStateSettings["outlinedIcons"]
                   ? Icons.sticky_note_2_outlined
                   : Icons.sticky_note_2_rounded,

@@ -220,6 +220,7 @@ Future openAddTransactionTypePicker(
       AddTransactionPage(
         selectedBudget: selectedBudget,
         selectedIncome: isIncome,
+        skipCategoryStepForIncome: isIncome,
         routesToPopAfterDelete: routesToPopAfterDelete,
       ),
     );
