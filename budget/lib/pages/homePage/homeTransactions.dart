@@ -13,7 +13,11 @@ class HomeTransactions extends StatelessWidget {
   final int selectedSlidingSelector;
   @override
   Widget build(BuildContext context) {
+    // Локальная версия: вкладка 4 = «Предстоящие» (неоплаченные),
+    // остальные вкладки показывают только совершённые операции
+    final bool isUpcomingTab = selectedSlidingSelector == 4;
     SearchFilters searchFilters = SearchFilters(
+      paidStatus: [isUpcomingTab ? PaidStatus.notPaid : PaidStatus.paid],
       expenseIncome:
           appStateSettings["homePageTransactionsListIncomeAndExpenseOnly"] ==
                   true
@@ -32,16 +36,19 @@ class HomeTransactions extends StatelessWidget {
                       : null
               : null,
     );
-    int numberOfFutureDays = appStateSettings["futureTransactionDaysHomePage"];
     return TransactionEntries(
       showNumberOfDaysUntilForFutureDates: true,
+      key: ValueKey(isUpcomingTab),
       renderType: TransactionEntriesRenderType.implicitlyAnimatedNonSlivers,
-      showNoResults: false,
+      showNoResults: isUpcomingTab,
+      noResultsMessage: "Предстоящих транзакций нет",
       DateTime.now().justDay(monthOffset: -1),
-      DateTime.now().justDay(dayOffset: numberOfFutureDays),
+      isUpcomingTab
+          ? DateTime.now().justDay(dayOffset: 90)
+          : DateTime.now().justDay(),
       dateDividerColor: Colors.transparent,
       useHorizontalPaddingConstrained: false,
-      pastDaysLimitToShow: 7,
+      pastDaysLimitToShow: isUpcomingTab ? null : 7,
       limitPerDay: 50,
       searchFilters: searchFilters,
       enableFutureTransactionsCollapse: false,
