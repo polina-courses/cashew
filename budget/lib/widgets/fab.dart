@@ -262,7 +262,6 @@ Future openAddTransactionTypePicker(
               alignStart: true,
               alignBeside: true,
               padding: EdgeInsetsDirectional.symmetric(horizontal: 8, vertical: 18),
-            padding: EdgeInsetsDirectional.symmetric(horizontal: 8, vertical: 18),
               onTap: () {
                 popRoute(context);
                 openBottomSheet(
