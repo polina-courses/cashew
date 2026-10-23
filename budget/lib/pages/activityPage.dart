@@ -166,12 +166,7 @@ class ActivityPageState extends State<ActivityPage> {
         title: "activity-log".tr(),
         listID: pageId,
         floatingActionButton: AnimateFABDelayed(
-          fab: AddFAB(
-            tooltip: "add-transaction".tr(),
-            openPage: AddTransactionPage(
-              routesToPopAfterDelete: RoutesToPopAfterDelete.None,
-            ),
-          ),
+          fab: AddTransactionFAB(),
         ),
         slivers: [
           StreamBuilder<List<TransactionActivityLog>>(

@@ -519,12 +519,7 @@ class PageNavigationFrameworkState extends State<PageNavigationFramework> {
           ),
           child: AnimateFAB(
             key: ValueKey(1),
-            fab: AddFAB(
-              tooltip: "add-transaction".tr(),
-              openPage: AddTransactionPage(
-                routesToPopAfterDelete: RoutesToPopAfterDelete.None,
-              ),
-            ),
+            fab: AddTransactionFAB(),
             condition: [0, 1, 2, 14, 18].contains(currentPage),
           ),
         ),

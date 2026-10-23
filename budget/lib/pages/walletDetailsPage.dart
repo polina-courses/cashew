@@ -1242,11 +1242,8 @@ class WalletDetailsPageState extends State<WalletDetailsPage>
         key: pageState,
         listID: listID,
         floatingActionButton: AnimateFABDelayed(
-          fab: AddFAB(
-            tooltip: "add-transaction".tr(),
-            openPage: AddTransactionPage(
-              routesToPopAfterDelete: RoutesToPopAfterDelete.One,
-            ),
+          fab: AddTransactionFAB(
+            routesToPopAfterDelete: RoutesToPopAfterDelete.One,
           ),
         ),
         title:

@@ -6,7 +6,15 @@ import 'package:budget/widgets/openContainerNavigation.dart';
 import 'package:budget/widgets/outlinedButtonStacked.dart';
 import 'package:budget/widgets/tappable.dart';
 import 'package:budget/widgets/textWidgets.dart';
+import 'package:budget/database/tables.dart';
+import 'package:budget/functions.dart';
+import 'package:budget/pages/addTransactionPage.dart';
+import 'package:budget/pages/addWalletPage.dart';
+import 'package:budget/struct/databaseGlobal.dart';
+import 'package:budget/widgets/openPopup.dart';
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 class AddFAB extends StatelessWidget {
   const AddFAB({
@@ -163,4 +171,114 @@ class FAB extends StatelessWidget {
       openPage: openPage ?? Container(),
     );
   }
+}
+
+// Кнопка «+» для новой транзакции: сначала спрашивает тип
+// (расход / доход / перевод), потом открывает форму на нужной вкладке.
+class AddTransactionFAB extends StatelessWidget {
+  const AddTransactionFAB({
+    this.selectedBudget,
+    this.routesToPopAfterDelete = RoutesToPopAfterDelete.None,
+    this.color,
+    this.colorIcon,
+    super.key,
+  });
+  final Budget? selectedBudget;
+  final RoutesToPopAfterDelete routesToPopAfterDelete;
+  final Color? color;
+  final Color? colorIcon;
+
+  @override
+  Widget build(BuildContext context) {
+    return AddFAB(
+      tooltip: "add-transaction".tr(),
+      color: color,
+      colorIcon: colorIcon,
+      onTap: () {
+        openAddTransactionTypePicker(
+          context,
+          selectedBudget: selectedBudget,
+          routesToPopAfterDelete: routesToPopAfterDelete,
+        );
+      },
+    );
+  }
+}
+
+Future openAddTransactionTypePicker(
+  BuildContext context, {
+  Budget? selectedBudget,
+  RoutesToPopAfterDelete routesToPopAfterDelete = RoutesToPopAfterDelete.None,
+}) {
+  final bool canTransfer =
+      Provider.of<AllWallets>(context, listen: false).list.length > 1;
+
+  void openForm(bool isIncome) {
+    popRoute(context);
+    pushRoute(
+      context,
+      AddTransactionPage(
+        selectedBudget: selectedBudget,
+        selectedIncome: isIncome,
+        routesToPopAfterDelete: routesToPopAfterDelete,
+      ),
+    );
+  }
+
+  return openBottomSheet(
+    context,
+    PopupFramework(
+      title: "select-transaction-type".tr(),
+      child: Column(
+        children: [
+          OutlinedButtonStacked(
+            text: "expense".tr(),
+            iconData: appStateSettings["outlinedIcons"]
+                ? Icons.arrow_downward_outlined
+                : Icons.arrow_downward_rounded,
+            alignStart: true,
+            alignBeside: true,
+            padding: EdgeInsetsDirectional.symmetric(horizontal: 8, vertical: 18),
+            onTap: () => openForm(false),
+          ),
+          SizedBox(height: 10),
+          OutlinedButtonStacked(
+            text: "income".tr(),
+            iconData: appStateSettings["outlinedIcons"]
+                ? Icons.arrow_upward_outlined
+                : Icons.arrow_upward_rounded,
+            alignStart: true,
+            alignBeside: true,
+            padding: EdgeInsetsDirectional.symmetric(horizontal: 8, vertical: 18),
+            onTap: () => openForm(true),
+          ),
+          if (canTransfer) SizedBox(height: 10),
+          if (canTransfer)
+            OutlinedButtonStacked(
+              text: "transfer".tr(),
+              iconData: appStateSettings["outlinedIcons"]
+                  ? Icons.compare_arrows_outlined
+                  : Icons.compare_arrows_rounded,
+              alignStart: true,
+              alignBeside: true,
+              padding: EdgeInsetsDirectional.symmetric(horizontal: 8, vertical: 18),
+            padding: EdgeInsetsDirectional.symmetric(horizontal: 8, vertical: 18),
+              onTap: () {
+                popRoute(context);
+                openBottomSheet(
+                  context,
+                  fullSnap: true,
+                  TransferBalancePopup(
+                    allowEditWallet: true,
+                    wallet: Provider.of<AllWallets>(context, listen: false)
+                        .indexedByPk[appStateSettings["selectedWalletPk"]]!,
+                    showAllEditDetails: true,
+                  ),
+                );
+              },
+            ),
+        ],
+      ),
+    ),
+  );
 }

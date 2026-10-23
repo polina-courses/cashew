@@ -175,12 +175,7 @@ class TransactionsSearchPageState extends State<TransactionsSearchPage>
         onScroll: _scrollListener,
         title: "search".tr(),
         floatingActionButton: AnimateFABDelayed(
-          fab: AddFAB(
-            tooltip: "add-transaction".tr(),
-            openPage: AddTransactionPage(
-              routesToPopAfterDelete: RoutesToPopAfterDelete.None,
-            ),
-          ),
+          fab: AddTransactionFAB(),
         ),
         slivers: [
           SliverToBoxAdapter(
