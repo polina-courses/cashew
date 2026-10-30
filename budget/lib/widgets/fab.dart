@@ -221,6 +221,7 @@ Future openAddTransactionTypePicker(
         selectedBudget: selectedBudget,
         selectedIncome: isIncome,
         skipCategoryStepForIncome: isIncome,
+        startAsUpcoming: !isIncome,
         routesToPopAfterDelete: routesToPopAfterDelete,
       ),
     );

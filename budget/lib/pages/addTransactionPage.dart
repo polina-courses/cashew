@@ -108,6 +108,7 @@ class AddTransactionPage extends StatefulWidget {
     this.startInitialAddTransactionSequence = true,
     this.transferBalancePopup = false,
     this.skipCategoryStepForIncome = false,
+    this.startAsUpcoming = false,
     required this.routesToPopAfterDelete,
   }) : super(key: key);
 
@@ -130,6 +131,8 @@ class AddTransactionPage extends StatefulWidget {
   final bool transferBalancePopup;
   // Локальная версия: для дохода не спрашиваем источник (будет «Без категории»)
   final bool skipCategoryStepForIncome;
+  // Локальная версия: новая трата открывается как «Предстоящая» (можно переключить на совершённую)
+  final bool startAsUpcoming;
 
   @override
   _AddTransactionPageState createState() => _AddTransactionPageState();
@@ -928,6 +931,9 @@ class _AddTransactionPageState extends State<AddTransactionPage>
     } else {
       if (widget.selectedType != null) {
         setSelectedType(transactionTypeDisplayToEnum[widget.selectedType]);
+      } else if (widget.startAsUpcoming) {
+        setSelectedType(
+            transactionTypeDisplayToEnum[TransactionSpecialType.upcoming]);
       }
 
       _titleInputController = new TextEditingController();
