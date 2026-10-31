@@ -6,6 +6,7 @@ import 'package:budget/colors.dart';
 import 'package:budget/database/tables.dart';
 import 'package:budget/functions.dart';
 import 'package:budget/pages/addTransactionPage.dart';
+import 'package:budget/struct/currencyFunctions.dart';
 import 'package:budget/struct/databaseGlobal.dart';
 import 'package:budget/widgets/framework/pageFramework.dart';
 import 'package:budget/widgets/navigationSidebar.dart';
@@ -14,6 +15,7 @@ import 'package:budget/widgets/transactionEntry/transactionEntry.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 
 class UpcomingCalendarPage extends StatefulWidget {
   const UpcomingCalendarPage({required this.enableBackButton, Key? key})
@@ -35,7 +37,8 @@ class UpcomingCalendarPageState extends State<UpcomingCalendarPage> {
       database.watchAllOverdueUpcomingTransactions(null);
 
   DateTime focusedDay = calendarDayOnly(DateTime.now());
-  DateTime selectedDay = calendarDayOnly(DateTime.now());
+  // null — показываем весь период (неделю/месяц), иначе только выбранный день
+  DateTime? selectedDay;
   bool weekMode = false;
 
   void scrollToTop() {
@@ -44,6 +47,7 @@ class UpcomingCalendarPageState extends State<UpcomingCalendarPage> {
 
   void goToPrevious() {
     setState(() {
+      selectedDay = null;
       focusedDay = weekMode
           ? DateTime(focusedDay.year, focusedDay.month, focusedDay.day - 7)
           : DateTime(focusedDay.year, focusedDay.month - 1, 1);
@@ -52,6 +56,7 @@ class UpcomingCalendarPageState extends State<UpcomingCalendarPage> {
 
   void goToNext() {
     setState(() {
+      selectedDay = null;
       focusedDay = weekMode
           ? DateTime(focusedDay.year, focusedDay.month, focusedDay.day + 7)
           : DateTime(focusedDay.year, focusedDay.month + 1, 1);
@@ -109,7 +114,41 @@ class UpcomingCalendarPageState extends State<UpcomingCalendarPage> {
     String locale = context.locale.toString();
     ColorScheme colorScheme = Theme.of(context).colorScheme;
     List<DateTime?> cells = visibleCells();
-    List<Transaction> selectedTransactions = byDay[selectedDay] ?? const [];
+    DateTime periodStart = cells.firstWhere((d) => d != null)!;
+    DateTime periodEnd = cells.lastWhere((d) => d != null)!;
+
+    // Платежи периода в порядке от ближайших к дальним
+    List<Transaction> periodTransactions = [];
+    for (DateTime day in byDay.keys) {
+      if (day.isBefore(periodStart) || day.isAfter(periodEnd)) continue;
+      periodTransactions.addAll(byDay[day]!);
+    }
+    periodTransactions
+        .sort((a, b) => a.dateCreated.compareTo(b.dateCreated));
+
+    AllWallets allWallets = Provider.of<AllWallets>(context);
+    double plannedExpenses = 0;
+    double plannedIncome = 0;
+    for (Transaction t in periodTransactions) {
+      double amount = t.amount.abs() *
+          amountRatioToPrimaryCurrencyGivenPk(allWallets, t.walletFk);
+      if (t.income)
+        plannedIncome += amount;
+      else
+        plannedExpenses += amount;
+    }
+    String periodWord = weekMode ? "На неделе" : "В месяце";
+    String summaryExpenses = plannedExpenses > 0
+        ? "$periodWord запланировано трат на сумму ${convertToMoney(allWallets, plannedExpenses)}"
+        : (weekMode
+            ? "На неделе трат не запланировано"
+            : "В месяце трат не запланировано");
+
+    List<Transaction> shownTransactions = selectedDay == null
+        ? periodTransactions
+        : periodTransactions
+            .where((t) => calendarDayOnly(t.dateCreated) == selectedDay)
+            .toList();
 
     String title;
     if (weekMode) {
@@ -154,6 +193,7 @@ class UpcomingCalendarPageState extends State<UpcomingCalendarPage> {
             onSelectionChanged: (Set<bool> selection) {
               setState(() {
                 weekMode = selection.first;
+                selectedDay = null;
               });
             },
           ),
@@ -197,23 +237,74 @@ class UpcomingCalendarPageState extends State<UpcomingCalendarPage> {
           ),
           SizedBox(height: 4),
           ...rows,
-          if (selectedTransactions.isNotEmpty) ...[
-            SizedBox(height: 18),
-            Text(
-              DateFormat.MMMMEEEEd(locale).format(selectedDay).capitalizeFirst,
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+          SizedBox(height: 14),
+          Container(
+            padding: EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: colorScheme.secondaryContainer.withOpacity(0.5),
+              borderRadius: BorderRadius.circular(15),
             ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  summaryExpenses,
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                ),
+                if (plannedIncome > 0) ...[
+                  SizedBox(height: 4),
+                  Text(
+                    "Ожидается поступлений на сумму ${convertToMoney(allWallets, plannedIncome)}",
+                    style: TextStyle(fontSize: 14),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          if (selectedDay != null) ...[
             SizedBox(height: 6),
-            for (Transaction transaction in selectedTransactions)
+            Align(
+              alignment: AlignmentDirectional.centerStart,
+              child: TextButton(
+                onPressed: () => setState(() => selectedDay = null),
+                child: Text(
+                    "Показать весь ${weekMode ? "период недели" : "месяц"}"),
+              ),
+            ),
+          ],
+          if (shownTransactions.isEmpty) ...[
+            SizedBox(height: 18),
+            Center(
+              child: Text(
+                "Запланированных платежей нет",
+                style: TextStyle(color: colorScheme.outline),
+              ),
+            ),
+            SizedBox(height: 30),
+          ] else ...[
+            for (int i = 0; i < shownTransactions.length; i++) ...[
+              if (i == 0 ||
+                  calendarDayOnly(shownTransactions[i].dateCreated) !=
+                      calendarDayOnly(shownTransactions[i - 1].dateCreated)) ...[
+                SizedBox(height: 14),
+                Text(
+                  DateFormat.MMMMEEEEd(locale)
+                      .format(shownTransactions[i].dateCreated)
+                      .capitalizeFirst,
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+                SizedBox(height: 6),
+              ],
               TransactionEntry(
-                key: ValueKey(transaction.transactionPk),
+                key: ValueKey(shownTransactions[i].transactionPk),
                 openPage: AddTransactionPage(
-                  transaction: transaction,
+                  transaction: shownTransactions[i],
                   routesToPopAfterDelete: RoutesToPopAfterDelete.One,
                 ),
-                transaction: transaction,
+                transaction: shownTransactions[i],
                 listID: pageId,
               ),
+            ],
             SizedBox(height: 30),
           ],
         ],
@@ -229,7 +320,7 @@ class UpcomingCalendarPageState extends State<UpcomingCalendarPage> {
       behavior: HitTestBehavior.opaque,
       onTap: () {
         setState(() {
-          selectedDay = day;
+          selectedDay = selectedDay == day ? null : day;
         });
       },
       child: SizedBox(
