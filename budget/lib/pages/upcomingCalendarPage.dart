@@ -7,6 +7,8 @@ import 'package:budget/database/tables.dart';
 import 'package:budget/functions.dart';
 import 'package:budget/pages/addTransactionPage.dart';
 import 'package:budget/struct/currencyFunctions.dart';
+import 'package:budget/widgets/categoryIcon.dart';
+import 'package:budget/widgets/transactionEntry/transactionEntryTypeButton.dart';
 import 'package:budget/struct/databaseGlobal.dart';
 import 'package:budget/widgets/framework/pageFramework.dart';
 import 'package:budget/widgets/navigationSidebar.dart';
@@ -113,55 +115,142 @@ class UpcomingCalendarPageState extends State<UpcomingCalendarPage> {
     }
   }
 
-  Widget buildProjectedRow(BuildContext context, Transaction projected) {
-    Transaction base = projectionBases[projected.transactionPk] ?? projected;
+  // Строка платежа в календаре: название сверху на всю ширину,
+  // ниже значок категории, счёт, сумма и кнопка оплаты
+  Widget buildPaymentRow(BuildContext context, Transaction t) {
+    bool isProjected = t.transactionPk.startsWith("proj|");
+    Transaction base = isProjected ? (projectionBases[t.transactionPk] ?? t) : t;
     ColorScheme colorScheme = Theme.of(context).colorScheme;
     AllWallets allWallets = Provider.of<AllWallets>(context, listen: false);
-    double amount = base.amount.abs() *
-        amountRatioToPrimaryCurrencyGivenPk(allWallets, base.walletFk);
+    TransactionWallet? wallet = allWallets.indexedByPk[base.walletFk];
+    DateTime todayStart = calendarDayOnly(DateTime.now());
+    int overdueDays =
+        todayStart.difference(calendarDayOnly(t.dateCreated)).inDays;
     return FutureBuilder<TransactionCategory?>(
       future: database.getCategoryInstanceOrNull(base.categoryFk),
       builder: (context, snapshot) {
-        String label = base.name.trim().isNotEmpty
-            ? base.name.trim()
-            : (snapshot.data?.name ?? "");
-        return InkWell(
-          borderRadius: BorderRadius.circular(15),
-          onTap: () {
-            pushRoute(
-              context,
-              AddTransactionPage(
-                transaction: base,
-                routesToPopAfterDelete: RoutesToPopAfterDelete.One,
-              ),
+        TransactionCategory? category = snapshot.data;
+        bool hasName = base.name.trim().isNotEmpty;
+        String title = hasName ? base.name.trim() : (category?.name ?? "");
+        List<String> details = [
+          if (hasName && category != null) category.name,
+          if (allWallets.indexedByPk.length > 1 && wallet != null) wallet.name,
+        ];
+        String amountText = (base.income ? "+" : "−") +
+            convertToMoney(
+              allWallets,
+              base.amount.abs(),
+              currencyKey: wallet?.currency,
+              decimals: wallet?.decimals,
             );
-          },
-          child: Padding(
-            padding:
-                const EdgeInsetsDirectional.symmetric(horizontal: 6, vertical: 10),
-            child: Row(
-              children: [
-                Icon(Icons.event_repeat_rounded,
-                    size: 22, color: colorScheme.outline),
-                SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+        return Container(
+          margin: const EdgeInsetsDirectional.only(bottom: 8),
+          decoration: BoxDecoration(
+            color: colorScheme.secondaryContainer.withOpacity(0.35),
+            borderRadius: BorderRadius.circular(15),
+          ),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(15),
+            onTap: () {
+              pushRoute(
+                context,
+                AddTransactionPage(
+                  transaction: base,
+                  routesToPopAfterDelete: RoutesToPopAfterDelete.One,
+                ),
+              );
+            },
+            child: Padding(
+              padding: const EdgeInsetsDirectional.fromSTEB(12, 10, 12, 10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title.isEmpty ? " " : title,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+                  SizedBox(height: 6),
+                  Row(
                     children: [
-                      Text(label,
+                      if (category != null)
+                        Padding(
+                          padding: const EdgeInsetsDirectional.only(end: 8),
+                          child: CategoryIcon(
+                            categoryPk: category.categoryPk,
+                            category: category,
+                            size: 22,
+                            sizePadding: 10,
+                            noBackground: false,
+                            canEditByLongPress: false,
+                            margin: EdgeInsetsDirectional.zero,
+                          ),
+                        ),
+                      Expanded(
+                        child: Text(
+                          details.join(" · "),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                           style: TextStyle(
-                              fontSize: 15, fontWeight: FontWeight.bold)),
-                      Text("Повторяется по расписанию",
-                          style: TextStyle(
-                              fontSize: 12, color: colorScheme.outline)),
+                              fontSize: 13, color: colorScheme.outline),
+                        ),
+                      ),
+                      SizedBox(width: 8),
+                      Text(
+                        amountText,
+                        style: TextStyle(
+                            fontSize: 16, fontWeight: FontWeight.bold),
+                      ),
                     ],
                   ),
-                ),
-                Text(
-                  (base.income ? "+" : "−") + convertToMoney(allWallets, amount),
-                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
-                ),
-              ],
+                  if (isProjected)
+                    Padding(
+                      padding: const EdgeInsetsDirectional.only(top: 6),
+                      child: Row(
+                        children: [
+                          Icon(Icons.event_repeat_rounded,
+                              size: 16, color: colorScheme.outline),
+                          SizedBox(width: 6),
+                          Text("Повторяется по расписанию",
+                              style: TextStyle(
+                                  fontSize: 12, color: colorScheme.outline)),
+                        ],
+                      ),
+                    )
+                  else
+                    Padding(
+                      padding: const EdgeInsetsDirectional.only(top: 6),
+                      child: Row(
+                        children: [
+                          if (overdueDays > 0)
+                            Expanded(
+                              child: Text(
+                                "Просрочено на $overdueDays дн.",
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: getColor(context, "unPaidOverdue"),
+                                ),
+                              ),
+                            )
+                          else
+                            Spacer(),
+                          OutlinedButton(
+                            style: OutlinedButton.styleFrom(
+                              visualDensity: VisualDensity.compact,
+                              padding: const EdgeInsetsDirectional.symmetric(
+                                  horizontal: 12),
+                            ),
+                            onPressed: () {
+                              openTransactionActionFromType(context, t);
+                            },
+                            child: Text("Оплатить или отменить"),
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
             ),
           ),
         );
@@ -455,24 +544,10 @@ class UpcomingCalendarPageState extends State<UpcomingCalendarPage> {
           ),
           SizedBox(height: 6),
         ],
-        if (list[i].transactionPk.startsWith("proj|"))
-          Builder(
-            key: ValueKey(list[i].transactionPk),
-            builder: (context) => buildProjectedRow(context, list[i]),
-          )
-        else
-          TransactionEntry(
-            key: ValueKey(list[i].transactionPk),
-            openPage: AddTransactionPage(
-              transaction: list[i],
-              routesToPopAfterDelete: RoutesToPopAfterDelete.One,
-            ),
-            transaction: list[i],
-            listID: pageId,
-            // Отступы страницы уже есть — без двойных, чтобы название не сжималось
-            customPadding: EdgeInsetsDirectional.zero,
-            useHorizontalPaddingConstrained: false,
-          ),
+        Builder(
+          key: ValueKey(list[i].transactionPk),
+          builder: (context) => buildPaymentRow(context, list[i]),
+        ),
       ],
     ];
   }
