@@ -63,6 +63,112 @@ class UpcomingCalendarPageState extends State<UpcomingCalendarPage> {
     });
   }
 
+  // Расчётные повторы: в базе у повторяющейся траты/подписки есть только
+  // ближайшая запись (следующая создаётся после оплаты). Чтобы в календаре
+  // были видны будущие недели/месяцы, досчитываем даты на видимый период.
+  // Это не записи в базе: нажатие открывает исходную трату.
+  Map<String, Transaction> projectionBases = {};
+
+  DateTime? nextOccurrenceDate(Transaction base, int n) {
+    int period = (base.periodLength ?? 1) < 1 ? 1 : (base.periodLength ?? 1);
+    DateTime d = base.dateCreated;
+    switch (base.reoccurrence) {
+      case BudgetReoccurence.yearly:
+        return DateTime(d.year + n * period, d.month, d.day, d.hour, d.minute);
+      case BudgetReoccurence.monthly:
+        return DateTime(d.year, d.month + n * period, d.day, d.hour, d.minute);
+      case BudgetReoccurence.weekly:
+        return DateTime(d.year, d.month, d.day + n * period * 7, d.hour, d.minute);
+      case BudgetReoccurence.daily:
+        return DateTime(d.year, d.month, d.day + n * period, d.hour, d.minute);
+      default:
+        return null;
+    }
+  }
+
+  void addProjectedOccurrences(
+      List<Transaction> upcoming, Map<DateTime, List<Transaction>> byDay) {
+    projectionBases = {};
+    List<DateTime?> cells = visibleCells();
+    DateTime horizon = cells.lastWhere((d) => d != null)!;
+    DateTime todayStart = calendarDayOnly(DateTime.now());
+    for (Transaction base in upcoming) {
+      if (base.type != TransactionSpecialType.repetitive &&
+          base.type != TransactionSpecialType.subscription) continue;
+      // Если следующая уже создана, она сама есть в списке
+      if (base.createdAnotherFutureTransaction == true) continue;
+      for (int n = 1; n <= 400; n++) {
+        DateTime? date = nextOccurrenceDate(base, n);
+        if (date == null) break;
+        if (calendarDayOnly(date).isAfter(horizon)) break;
+        if (base.endDate != null && base.endDate!.isBefore(date)) break;
+        if (calendarDayOnly(date).isBefore(todayStart)) continue;
+        Transaction projected = base.copyWith(
+          transactionPk: "proj|${base.transactionPk}|$n",
+          dateCreated: date,
+        );
+        projectionBases[projected.transactionPk] = base;
+        byDay.putIfAbsent(calendarDayOnly(date), () => []).add(projected);
+      }
+    }
+  }
+
+  Widget buildProjectedRow(BuildContext context, Transaction projected) {
+    Transaction base = projectionBases[projected.transactionPk] ?? projected;
+    ColorScheme colorScheme = Theme.of(context).colorScheme;
+    AllWallets allWallets = Provider.of<AllWallets>(context, listen: false);
+    double amount = base.amount.abs() *
+        amountRatioToPrimaryCurrencyGivenPk(allWallets, base.walletFk);
+    return FutureBuilder<TransactionCategory?>(
+      future: database.getCategoryInstanceOrNull(base.categoryFk),
+      builder: (context, snapshot) {
+        String label = base.name.trim().isNotEmpty
+            ? base.name.trim()
+            : (snapshot.data?.name ?? "");
+        return InkWell(
+          borderRadius: BorderRadius.circular(15),
+          onTap: () {
+            pushRoute(
+              context,
+              AddTransactionPage(
+                transaction: base,
+                routesToPopAfterDelete: RoutesToPopAfterDelete.One,
+              ),
+            );
+          },
+          child: Padding(
+            padding:
+                const EdgeInsetsDirectional.symmetric(horizontal: 6, vertical: 10),
+            child: Row(
+              children: [
+                Icon(Icons.event_repeat_rounded,
+                    size: 22, color: colorScheme.outline),
+                SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(label,
+                          style: TextStyle(
+                              fontSize: 15, fontWeight: FontWeight.bold)),
+                      Text("Повторяется по расписанию",
+                          style: TextStyle(
+                              fontSize: 12, color: colorScheme.outline)),
+                    ],
+                  ),
+                ),
+                Text(
+                  (base.income ? "+" : "−") + convertToMoney(allWallets, amount),
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   // Клетки сетки: 7 дней недели или все клетки месяца.
   // null — пустая клетка до первого и после последнего дня месяца.
   List<DateTime?> visibleCells() {
@@ -97,12 +203,14 @@ class UpcomingCalendarPageState extends State<UpcomingCalendarPage> {
           stream: upcomingStream,
           builder: (context, snapshot) {
             Map<DateTime, List<Transaction>> byDay = {};
-            for (Transaction transaction in snapshot.data ?? []) {
+            List<Transaction> allUpcoming = snapshot.data ?? [];
+            for (Transaction transaction in allUpcoming) {
               byDay
                   .putIfAbsent(
                       calendarDayOnly(transaction.dateCreated), () => [])
                   .add(transaction);
             }
+            addProjectedOccurrences(allUpcoming, byDay);
             return SliverToBoxAdapter(child: buildBody(context, byDay));
           },
         ),
@@ -347,15 +455,21 @@ class UpcomingCalendarPageState extends State<UpcomingCalendarPage> {
           ),
           SizedBox(height: 6),
         ],
-        TransactionEntry(
-          key: ValueKey(list[i].transactionPk),
-          openPage: AddTransactionPage(
+        if (list[i].transactionPk.startsWith("proj|"))
+          Builder(
+            key: ValueKey(list[i].transactionPk),
+            builder: (context) => buildProjectedRow(context, list[i]),
+          )
+        else
+          TransactionEntry(
+            key: ValueKey(list[i].transactionPk),
+            openPage: AddTransactionPage(
+              transaction: list[i],
+              routesToPopAfterDelete: RoutesToPopAfterDelete.One,
+            ),
             transaction: list[i],
-            routesToPopAfterDelete: RoutesToPopAfterDelete.One,
+            listID: pageId,
           ),
-          transaction: list[i],
-          listID: pageId,
-        ),
       ],
     ];
   }
