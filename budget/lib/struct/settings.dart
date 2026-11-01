@@ -88,6 +88,7 @@ Future<bool> initializeSettings() async {
   attemptToMigrateCustomNumberFormattingSettings();
   localMoveGoalsBelowLoansOnce();
   localCalendarInNavBarOnce();
+  await localCalendarFirstAndNoAutoPayOnce();
 
   // Disable sync every change is not on web
   // It will still sync when user pulls down to refresh
@@ -440,6 +441,30 @@ void localMoveGoalsBelowLoansOnce() {
   appStateSettings["localMovedGoalsBelowLoans"] = true;
 }
 
+
+/// Одноразово: «Календарь» первой вкладкой (приложение открывается на нём),
+/// и отключаем автоматическую оплату предстоящих платежей.
+Future<void> localCalendarFirstAndNoAutoPayOnce() async {
+  if (appStateSettings["localCalendarFirstOnce"] == true) return;
+  try {
+    await updateSettings("customNavBarShortcut0", "calendar",
+        updateGlobalState: false);
+    await updateSettings("customNavBarShortcut1", "home",
+        updateGlobalState: false);
+    await updateSettings("customNavBarShortcut2", "transactions",
+        updateGlobalState: false);
+    await updateSettings("automaticallyPayUpcoming", false,
+        updateGlobalState: false);
+    await updateSettings("automaticallyPayRepetitive", false,
+        updateGlobalState: false);
+    await updateSettings("automaticallyPaySubscriptions", false,
+        updateGlobalState: false);
+  } catch (e) {
+    print("Error applying calendar-first migration " + e.toString());
+  }
+  await updateSettings("localCalendarFirstOnce", true,
+      updateGlobalState: false);
+}
 
 /// Одноразово: пункт «Бюджет» в нижнем меню заменяем на «Календарь».
 /// Бюджеты остаются доступны в выборе ярлыка меню.

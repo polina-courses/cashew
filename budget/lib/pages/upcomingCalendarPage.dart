@@ -39,7 +39,7 @@ class UpcomingCalendarPageState extends State<UpcomingCalendarPage> {
   DateTime focusedDay = calendarDayOnly(DateTime.now());
   // null — показываем весь период (неделю/месяц), иначе только выбранный день
   DateTime? selectedDay;
-  bool weekMode = false;
+  bool weekMode = true;
 
   void scrollToTop() {
     pageState.currentState?.scrollToTop();
@@ -117,13 +117,22 @@ class UpcomingCalendarPageState extends State<UpcomingCalendarPage> {
     DateTime periodStart = cells.firstWhere((d) => d != null)!;
     DateTime periodEnd = cells.lastWhere((d) => d != null)!;
 
-    // Платежи периода в порядке от ближайших к дальним
+    // Платежи периода в порядке от ближайших к дальним.
+    // Просроченные (дата раньше сегодняшней) вынесены в отдельный блок.
+    DateTime todayStart = calendarDayOnly(DateTime.now());
     List<Transaction> periodTransactions = [];
+    List<Transaction> overdueTransactions = [];
     for (DateTime day in byDay.keys) {
+      if (day.isBefore(todayStart)) {
+        overdueTransactions.addAll(byDay[day]!);
+        continue;
+      }
       if (day.isBefore(periodStart) || day.isAfter(periodEnd)) continue;
       periodTransactions.addAll(byDay[day]!);
     }
     periodTransactions
+        .sort((a, b) => a.dateCreated.compareTo(b.dateCreated));
+    overdueTransactions
         .sort((a, b) => a.dateCreated.compareTo(b.dateCreated));
 
     AllWallets allWallets = Provider.of<AllWallets>(context);
@@ -144,11 +153,16 @@ class UpcomingCalendarPageState extends State<UpcomingCalendarPage> {
             ? "На неделе трат не запланировано"
             : "В месяце трат не запланировано");
 
+    double overdueExpenses = 0;
+    for (Transaction t in overdueTransactions) {
+      if (t.income) continue;
+      overdueExpenses += t.amount.abs() *
+          amountRatioToPrimaryCurrencyGivenPk(allWallets, t.walletFk);
+    }
+
     List<Transaction> shownTransactions = selectedDay == null
         ? periodTransactions
-        : periodTransactions
-            .where((t) => calendarDayOnly(t.dateCreated) == selectedDay)
-            .toList();
+        : (byDay[selectedDay] ?? const <Transaction>[]).toList();
 
     String title;
     if (weekMode) {
@@ -261,6 +275,26 @@ class UpcomingCalendarPageState extends State<UpcomingCalendarPage> {
               ],
             ),
           ),
+          if (selectedDay == null && overdueTransactions.isNotEmpty) ...[
+            SizedBox(height: 14),
+            Text(
+              "Просрочено — нужно оплатить или отменить",
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.bold,
+                color: getColor(context, "unPaidOverdue"),
+              ),
+            ),
+            if (overdueExpenses > 0)
+              Padding(
+                padding: const EdgeInsetsDirectional.only(top: 2),
+                child: Text(
+                  "Не оплачено на сумму ${convertToMoney(allWallets, overdueExpenses)}",
+                  style: TextStyle(fontSize: 13, color: colorScheme.outline),
+                ),
+              ),
+            ...buildDatedList(overdueTransactions, locale),
+          ],
           if (selectedDay != null) ...[
             SizedBox(height: 6),
             Align(
@@ -282,34 +316,48 @@ class UpcomingCalendarPageState extends State<UpcomingCalendarPage> {
             ),
             SizedBox(height: 30),
           ] else ...[
-            for (int i = 0; i < shownTransactions.length; i++) ...[
-              if (i == 0 ||
-                  calendarDayOnly(shownTransactions[i].dateCreated) !=
-                      calendarDayOnly(shownTransactions[i - 1].dateCreated)) ...[
-                SizedBox(height: 14),
-                Text(
-                  DateFormat.MMMMEEEEd(locale)
-                      .format(shownTransactions[i].dateCreated)
-                      .capitalizeFirst,
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                ),
-                SizedBox(height: 6),
-              ],
-              TransactionEntry(
-                key: ValueKey(shownTransactions[i].transactionPk),
-                openPage: AddTransactionPage(
-                  transaction: shownTransactions[i],
-                  routesToPopAfterDelete: RoutesToPopAfterDelete.One,
-                ),
-                transaction: shownTransactions[i],
-                listID: pageId,
+            if (selectedDay == null && overdueTransactions.isNotEmpty) ...[
+              SizedBox(height: 18),
+              Text(
+                weekMode ? "Запланировано на неделю" : "Запланировано на месяц",
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
               ),
             ],
+            ...buildDatedList(shownTransactions, locale),
             SizedBox(height: 30),
           ],
         ],
       ),
     );
+  }
+
+  // Список платежей с заголовком-датой перед каждым днём
+  List<Widget> buildDatedList(List<Transaction> list, String locale) {
+    return [
+      for (int i = 0; i < list.length; i++) ...[
+        if (i == 0 ||
+            calendarDayOnly(list[i].dateCreated) !=
+                calendarDayOnly(list[i - 1].dateCreated)) ...[
+          SizedBox(height: 14),
+          Text(
+            DateFormat.MMMMEEEEd(locale)
+                .format(list[i].dateCreated)
+                .capitalizeFirst,
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+          ),
+          SizedBox(height: 6),
+        ],
+        TransactionEntry(
+          key: ValueKey(list[i].transactionPk),
+          openPage: AddTransactionPage(
+            transaction: list[i],
+            routesToPopAfterDelete: RoutesToPopAfterDelete.One,
+          ),
+          transaction: list[i],
+          listID: pageId,
+        ),
+      ],
+    ];
   }
 
   Widget buildDayCell(BuildContext context,

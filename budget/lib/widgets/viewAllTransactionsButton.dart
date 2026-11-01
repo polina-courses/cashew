@@ -21,8 +21,11 @@ class ViewAllTransactionsButton extends StatelessWidget {
           PageNavigationFramework.changePage(
             context,
             1,
-            switchNavbar:
-                appStateSettings["customNavBarShortcut1"] == "transactions",
+            switchNavbar: [
+              appStateSettings["customNavBarShortcut0"],
+              appStateSettings["customNavBarShortcut1"],
+              appStateSettings["customNavBarShortcut2"],
+            ].contains("transactions"),
           );
       },
       text: "view-all-transactions".tr(),
