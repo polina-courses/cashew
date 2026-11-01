@@ -222,6 +222,8 @@ Future openAddTransactionTypePicker(
         selectedIncome: isIncome,
         skipCategoryStepForIncome: isIncome,
         startAsUpcoming: !isIncome,
+        // Расход заводится одной формой: сумма, категория, название, комментарий
+        startInitialAddTransactionSequence: isIncome,
         routesToPopAfterDelete: routesToPopAfterDelete,
       ),
     );

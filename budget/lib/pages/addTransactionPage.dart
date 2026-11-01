@@ -165,6 +165,13 @@ class _AddTransactionPageState extends State<AddTransactionPage>
   bool notesInputFocused = false;
   bool showMoreOptions = false;
   List<String> selectedExcludedBudgetPks = [];
+  // Локальная версия: новый расход на одном экране (без цепочки окон)
+  bool get isSingleFormExpense =>
+      widget.transaction == null &&
+      widget.startInitialAddTransactionSequence == false &&
+      widget.transferBalancePopup == false &&
+      widget.selectedType == null &&
+      widget.selectedObjective == null;
   late bool isAddedToLoanObjective =
       widget.selectedObjective?.type == ObjectiveType.loan ||
           widget.transaction?.objectiveLoanFk != null;
@@ -1222,6 +1229,33 @@ class _AddTransactionPageState extends State<AddTransactionPage>
         enableDoubleColumn(context)
             ? Container(height: 20)
             : Container(height: 10),
+        // Локальная версия: новый расход заводится на одном экране —
+        // категории прямо в форме, без цепочки окон
+        if (isSingleFormExpense && selectedIncome == false)
+          Padding(
+            padding: const EdgeInsetsDirectional.only(
+                start: 18, end: 18, bottom: 8),
+            child: SelectCategory(
+              selectedCategory: selectedCategory,
+              setSelectedCategory: (TransactionCategory category) {
+                setSelectedCategory(category, setIncome: false);
+              },
+              selectedIncome: false,
+              popRoute: false,
+              allowRearrange: false,
+            ),
+          ),
+        TitleInput(
+          clearWhenUnfocused: true,
+          tryToCompleteSearch: true,
+          setSelectedTitle: (title) {
+            setSelectedTitle(title, setInput: false);
+          },
+          titleInputController: _titleInputController,
+          setSelectedCategory: setSelectedCategory,
+          setSelectedSubCategory: setSelectedSubCategory,
+        ),
+        Container(height: 14),
         Padding(
           padding: const EdgeInsetsDirectional.symmetric(horizontal: 22),
           child: TransactionNotesTextInput(
@@ -2263,6 +2297,8 @@ class _AddTransactionPageState extends State<AddTransactionPage>
                       ? Button(
                           hasBottomExtraSafeArea: true,
                           label: "select-category".tr(),
+                          disabled: isSingleFormExpense,
+                          onDisabled: () {},
                           onTap: () {
                             selectCategorySequence(
                               context,
