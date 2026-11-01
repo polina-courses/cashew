@@ -115,6 +115,8 @@ Future<Map<String, dynamic>> getDefaultPreferences() async {
     "removeZeroTransactionEntries": true,
     "ignorePastAmountSpent": false,
     "askForTransactionTitle": true,
+    // Локальная версия: категория расхода → счёт по умолчанию {categoryPk: walletPk}
+    "categoryWalletLinks": <String, dynamic>{},
     "askForTransactionNoteWithTitle": false,
     // Локальная версия: платежи сами не оплачиваются, пока их не отметишь
     "automaticallyPayUpcoming": false,

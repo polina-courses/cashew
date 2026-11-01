@@ -1,4 +1,7 @@
 import 'package:budget/database/tables.dart';
+import 'package:budget/pages/editWalletsPage.dart';
+import 'package:budget/struct/categoryWalletLinks.dart';
+import 'package:provider/provider.dart';
 import 'package:budget/functions.dart';
 import 'package:budget/modified/reorderable_list.dart';
 import 'package:budget/pages/addTransactionPage.dart';
@@ -61,6 +64,8 @@ class _AddCategoryPageState extends State<AddCategoryPage>
   bool isMainCategoryWhenCreating = true;
   String? mainCategoryPkForSubcategoryWhenCreating;
   String? selectedTitle;
+  // Локальная версия: счёт по умолчанию для категории расхода
+  String? selectedDefaultWalletPk;
   late String? selectedImage = widget.category == null ? "image.png" : null;
   String? selectedEmoji;
   late Color? selectedColor = widget.category?.colour == null
@@ -151,10 +156,19 @@ class _AddCategoryPageState extends State<AddCategoryPage>
 
   Future addCategory() async {
     TransactionCategory createdCategory = await createTransactionCategory();
-    await database.createOrUpdateCategory(
+    int categoryRowId = await database.createOrUpdateCategory(
       insert: widget.category == null,
       createdCategory,
     );
+    // Локальная версия: сохраняем счёт по умолчанию для категории расхода
+    if (selectedIncome == false &&
+        isSubCategory == false &&
+        widget.category?.categoryPk != "0") {
+      String savedCategoryPk = widget.category != null
+          ? widget.category!.categoryPk
+          : (await database.getCategoryFromRowId(categoryRowId)).categoryPk;
+      await setCategoryWalletLink(savedCategoryPk, selectedDefaultWalletPk);
+    }
     if (canSelectIfSubCategoryOrMainCategory() &&
         mainCategoryPkForSubcategoryWhenCreating != null) {
       TransactionCategory categoryMain = await database
@@ -247,6 +261,8 @@ class _AddCategoryPageState extends State<AddCategoryPage>
         selectedImage = widget.category?.iconName;
         selectedEmoji = widget.category?.emojiIconName;
         selectedIncome = widget.category!.income;
+        selectedDefaultWalletPk =
+            getCategoryWalletLinks()[widget.category!.categoryPk];
         userAttemptedToChangeTitle = true;
       });
       Future.delayed(Duration.zero, () async {
@@ -613,6 +629,55 @@ class _AddCategoryPageState extends State<AddCategoryPage>
                     ),
                   ),
                 ),
+                if (widget.category?.categoryPk != "0" &&
+                    selectedIncome == false &&
+                    isSubCategory == false)
+                  Padding(
+                    padding: const EdgeInsetsDirectional.only(
+                        start: 20, end: 20, top: 12),
+                    child: SettingsContainer(
+                      isOutlined: true,
+                      isWideOutlined: true,
+                      title: "Счёт по умолчанию",
+                      description: selectedDefaultWalletPk == null
+                          ? "Не задан — запомнится по первой трате"
+                          : (Provider.of<AllWallets>(context)
+                                  .indexedByPk[selectedDefaultWalletPk]
+                                  ?.name ??
+                              "Счёт удалён"),
+                      icon: appStateSettings["outlinedIcons"]
+                          ? Icons.account_balance_wallet_outlined
+                          : Icons.account_balance_wallet_rounded,
+                      iconScale: 1,
+                      afterWidget: selectedDefaultWalletPk == null
+                          ? null
+                          : IconButton(
+                              icon: Icon(Icons.close_rounded),
+                              onPressed: () {
+                                setState(() {
+                                  selectedDefaultWalletPk = null;
+                                });
+                              },
+                            ),
+                      onTap: () async {
+                        TransactionWallet? picked = await selectWalletPopup(
+                          context,
+                          selectedWallet: selectedDefaultWalletPk == null
+                              ? null
+                              : Provider.of<AllWallets>(context, listen: false)
+                                  .indexedByPk[selectedDefaultWalletPk],
+                          allowEditWallet: false,
+                          allowDeleteWallet: false,
+                          title: "Счёт по умолчанию",
+                        );
+                        if (picked != null) {
+                          setState(() {
+                            selectedDefaultWalletPk = picked.walletPk;
+                          });
+                        }
+                      },
+                    ),
+                  ),
                 if (widget.category?.categoryPk == "0")
                   balanceCorrectionCategorySettings,
                 widget.category?.categoryPk == "0" ||

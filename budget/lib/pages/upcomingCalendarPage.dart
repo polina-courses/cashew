@@ -469,6 +469,9 @@ class UpcomingCalendarPageState extends State<UpcomingCalendarPage> {
             ),
             transaction: list[i],
             listID: pageId,
+            // Отступы страницы уже есть — без двойных, чтобы название не сжималось
+            customPadding: EdgeInsetsDirectional.zero,
+            useHorizontalPaddingConstrained: false,
           ),
       ],
     ];

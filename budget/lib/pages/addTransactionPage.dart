@@ -38,6 +38,7 @@ import 'package:budget/widgets/openPopup.dart';
 import 'package:budget/widgets/openSnackbar.dart';
 import 'package:budget/widgets/radioItems.dart';
 import 'package:budget/widgets/selectAmount.dart';
+import 'package:budget/struct/categoryWalletLinks.dart';
 import 'package:budget/widgets/selectCategory.dart';
 import 'package:budget/widgets/tappable.dart';
 import 'package:budget/widgets/textInput.dart';
@@ -259,6 +260,19 @@ class _AddTransactionPageState extends State<AddTransactionPage>
       if (selectedCategory != category) selectedSubCategory = null;
       selectedCategory = category;
     });
+    // Локальная версия: у категории расхода есть счёт по умолчанию — подставляем его
+    if (widget.transaction == null &&
+        widget.selectedWallet == null &&
+        walletChosenManually == false &&
+        isAddedToLoanObjective == false &&
+        category.income == false &&
+        category.categoryPk != "0") {
+      String? linked = getLinkedWalletPk(category.categoryPk,
+          Provider.of<AllWallets>(context, listen: false));
+      if (linked != null && linked != selectedWalletPk) {
+        setSelectedWalletPk(linked, manual: false);
+      }
+    }
     return;
   }
 
@@ -425,7 +439,12 @@ class _AddTransactionPageState extends State<AddTransactionPage>
     });
   }
 
-  void setSelectedWalletPk(String selectedWalletPkPassed) {
+  // Счёт выбран вручную — привязка категории его уже не меняет
+  bool walletChosenManually = false;
+
+  void setSelectedWalletPk(String selectedWalletPkPassed,
+      {bool manual = true}) {
+    if (manual) walletChosenManually = true;
     setState(() {
       if (selectedWalletPk != selectedWalletPkPassed) selectedEnvelopePk = null;
       selectedWalletPk = selectedWalletPkPassed;
@@ -595,6 +614,17 @@ class _AddTransactionPageState extends State<AddTransactionPage>
       }
 
       Transaction createdTransaction = await createTransaction();
+
+      // Локальная версия: первая трата в категории запоминает счёт как счёт по умолчанию
+      if (widget.transaction == null &&
+          selectedIncome == false &&
+          isAddedToLoanObjective == false &&
+          selectedCategory != null &&
+          selectedCategory!.categoryPk != "0" &&
+          getCategoryWalletLinks()[selectedCategory!.categoryPk] == null) {
+        await setCategoryWalletLink(
+            selectedCategory!.categoryPk, selectedWalletPk);
+      }
 
       if (widget.transaction != null) {
         // Only ask if changes were made that will affect other balance correction
@@ -2205,7 +2235,9 @@ class _AddTransactionPageState extends State<AddTransactionPage>
               padding: const EdgeInsetsDirectional.only(bottom: 6),
             ),
           // Локальная версия: из какой подгруппы счёта трата
-          if (needsEnvelope && getSelectedWallet(listen: true) != null)
+          if (needsEnvelope &&
+              (selectedCategory != null || !isSingleFormExpense) &&
+              getSelectedWallet(listen: true) != null)
             SelectEnvelopeChips(
               wallet: getSelectedWallet(listen: true)!,
               selectedEnvelopePk: selectedEnvelopePk,
