@@ -1237,6 +1237,196 @@ class _AddTransactionPageState extends State<AddTransactionPage>
     );
   }
 
+  // Локальная версия: форма нового расхода в одном порядке:
+  // название → категория → счёт и подгруппа → сумма → дополнительно → сохранить
+  List<Widget> buildSingleFormExpenseWidgets(BuildContext context) {
+    AllWallets allWallets = Provider.of<AllWallets>(context);
+    TransactionWallet? wallet = getSelectedWallet(listen: true);
+    Color hintColor = getColor(context, "textLight");
+
+    Widget sectionTitle(String text) => Padding(
+          padding: const EdgeInsetsDirectional.fromSTEB(22, 20, 22, 8),
+          child: TextFont(
+            text: text,
+            fontSize: 14,
+            fontWeight: FontWeight.bold,
+            textColor: hintColor,
+          ),
+        );
+
+    Widget hint(String text) => Padding(
+          padding: const EdgeInsetsDirectional.symmetric(horizontal: 22),
+          child: TextFont(text: text, fontSize: 14, textColor: hintColor),
+        );
+
+    Widget amountCard = Padding(
+      padding: const EdgeInsetsDirectional.symmetric(horizontal: 18),
+      child: Tappable(
+        color: Theme.of(context).colorScheme.secondaryContainer.withOpacity(0.4),
+        borderRadius: 15,
+        onTap: () => selectAmountPopup(),
+        child: Padding(
+          padding: const EdgeInsetsDirectional.symmetric(
+              horizontal: 18, vertical: 16),
+          child: Row(
+            children: [
+              Expanded(
+                child: TextFont(
+                  text: selectedAmount == null
+                      ? "Введите сумму"
+                      : convertToMoney(
+                          allWallets,
+                          selectedAmount!,
+                          currencyKey: wallet?.currency,
+                          decimals: wallet?.decimals,
+                        ),
+                  fontSize: selectedAmount == null ? 18 : 28,
+                  fontWeight: FontWeight.bold,
+                  textColor: selectedAmount == null
+                      ? hintColor
+                      : getColor(context, "black"),
+                  maxLines: 1,
+                  autoSizeText: true,
+                ),
+              ),
+              Icon(
+                appStateSettings["outlinedIcons"]
+                    ? Icons.edit_outlined
+                    : Icons.edit_rounded,
+                color: hintColor,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    return [
+      sectionTitle("1. Название (необязательно)"),
+      TitleInput(
+        clearWhenUnfocused: true,
+        tryToCompleteSearch: true,
+        setSelectedTitle: (title) {
+          setSelectedTitle(title, setInput: false);
+        },
+        titleInputController: _titleInputController,
+        setSelectedCategory: setSelectedCategory,
+        setSelectedSubCategory: setSelectedSubCategory,
+      ),
+      sectionTitle("2. Категория расхода"),
+      Padding(
+        padding: const EdgeInsetsDirectional.symmetric(horizontal: 18),
+        child: SelectCategory(
+          selectedCategory: selectedCategory,
+          setSelectedCategory: (TransactionCategory category) {
+            setSelectedCategory(category, setIncome: false);
+          },
+          selectedIncome: false,
+          popRoute: false,
+          allowRearrange: false,
+        ),
+      ),
+      if (selectedCategory != null)
+        SelectSubcategoryChips(
+          setSelectedSubCategory: (category) {
+            setSelectedSubCategory(category, toggle: true);
+          },
+          selectedCategoryPk: selectedCategory!.categoryPk,
+          selectedSubCategoryPk: selectedSubCategory?.categoryPk,
+          padding: const EdgeInsetsDirectional.only(top: 6),
+        ),
+      sectionTitle("3. Счёт и подгруппа"),
+      if (selectedCategory == null)
+        hint("Сначала выберите категорию")
+      else ...[
+        if (allWallets.list.length > 1)
+          SelectChips(
+            allowMultipleSelected: false,
+            items: allWallets.list,
+            getSelected: (TransactionWallet w) =>
+                getSelectedWallet(listen: false)?.walletPk == w.walletPk,
+            onSelected: (TransactionWallet w) {
+              setSelectedWalletPk(w.walletPk);
+            },
+            getLabel: (TransactionWallet w) =>
+                getWalletStringName(allWallets, w),
+          ),
+        if (needsEnvelope && wallet != null)
+          SelectEnvelopeChips(
+            wallet: wallet,
+            selectedEnvelopePk: selectedEnvelopePk,
+            onSelected: setSelectedEnvelopePk,
+            editingTransaction: widget.transaction,
+          ),
+        if (allWallets.list.length <= 1 && !needsEnvelope)
+          hint("Единственный счёт: ${wallet?.name ?? ""}"),
+      ],
+      sectionTitle("4. Сумма"),
+      amountCard,
+      sectionTitle("5. Дополнительно"),
+      SelectChips(
+        allowMultipleSelected: false,
+        items: <String>["upcoming", "paid-now"],
+        getLabel: (String item) =>
+            item == "upcoming" ? "Предстоящая" : "Уже оплачено",
+        getSelected: (String item) =>
+            (item == "upcoming") == (selectedType == TransactionSpecialType.upcoming),
+        onSelected: (String item) {
+          setSelectedType(item == "upcoming"
+              ? transactionTypeDisplayToEnum[TransactionSpecialType.upcoming]
+              : transactionTypeDisplayToEnum[null]);
+        },
+      ),
+      SizedBox(height: 6),
+      Padding(
+        padding: const EdgeInsetsDirectional.symmetric(horizontal: 10),
+        child: AnimatedSwitcher(
+          duration: Duration(milliseconds: 300),
+          child: DateButton(
+            internalPadding: EdgeInsetsDirectional.only(
+                start: 12, bottom: 6, top: 6, end: 8),
+            key: ValueKey(selectedDate.toString()),
+            initialSelectedDate: selectedDate,
+            initialSelectedTime:
+                TimeOfDay(hour: selectedDate.hour, minute: selectedDate.minute),
+            setSelectedDate: (date) {
+              selectedDate = date;
+            },
+            setSelectedTime: (time) {
+              selectedDate =
+                  selectedDate.copyWith(hour: time.hour, minute: time.minute);
+            },
+          ),
+        ),
+      ),
+      SizedBox(height: 10),
+      Padding(
+        padding: const EdgeInsetsDirectional.symmetric(horizontal: 22),
+        child: TransactionNotesTextInput(
+          noteInputController: _noteInputController,
+          setNotesInputFocused: (isFocused) {
+            setState(() {
+              notesInputFocused = isFocused;
+            });
+          },
+          setSelectedNoteController: setSelectedNoteController,
+        ),
+      ),
+      SelectAddedBudget(
+        selectedBudgetPk: selectedBudgetPk,
+        setSelectedBudget: setSelectedBudgetPk,
+        horizontalBreak: true,
+      ),
+      SelectObjective(
+        setSelectedObjective: setSelectedObjectivePk,
+        selectedObjectivePk: selectedObjectivePk,
+        horizontalBreak: true,
+        objectiveType: ObjectiveType.goal,
+      ),
+      SizedBox(height: 120),
+    ];
+  }
+
   @override
   Widget build(BuildContext context) {
     Color categoryColor = dynamicPastel(
@@ -1259,22 +1449,6 @@ class _AddTransactionPageState extends State<AddTransactionPage>
         enableDoubleColumn(context)
             ? Container(height: 20)
             : Container(height: 10),
-        // Локальная версия: новый расход заводится на одном экране —
-        // категории прямо в форме, без цепочки окон
-        if (isSingleFormExpense && selectedIncome == false)
-          Padding(
-            padding: const EdgeInsetsDirectional.only(
-                start: 18, end: 18, bottom: 8),
-            child: SelectCategory(
-              selectedCategory: selectedCategory,
-              setSelectedCategory: (TransactionCategory category) {
-                setSelectedCategory(category, setIncome: false);
-              },
-              selectedIncome: false,
-              popRoute: false,
-              allowRearrange: false,
-            ),
-          ),
         TitleInput(
           clearWhenUnfocused: true,
           tryToCompleteSearch: true,
@@ -2267,7 +2441,9 @@ class _AddTransactionPageState extends State<AddTransactionPage>
         title: widget.transaction == null
             ? isAddedToLoanObjective
                 ? "add-record".tr()
-                : "add-transaction".tr()
+                : (isSingleFormExpense && selectedIncome == false)
+                    ? "Новый расход"
+                    : "add-transaction".tr()
             : isAddedToLoanObjective
                 ? "edit-record".tr()
                 : "edit-transaction".tr(),
@@ -2424,7 +2600,9 @@ class _AddTransactionPageState extends State<AddTransactionPage>
             ),
           ),
         ),
-        listWidgets: [
+        listWidgets: isSingleFormExpense && selectedIncome == false
+            ? buildSingleFormExpenseWidgets(context)
+            : [
           enableDoubleColumn(context) == false
               ? transactionAmountAndCategoryHeader
               : SizedBox.shrink(),
