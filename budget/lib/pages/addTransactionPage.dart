@@ -39,6 +39,8 @@ import 'package:budget/widgets/openSnackbar.dart';
 import 'package:budget/widgets/radioItems.dart';
 import 'package:budget/widgets/selectAmount.dart';
 import 'package:budget/struct/categoryWalletLinks.dart';
+import 'package:budget/struct/envelopePlan.dart';
+import 'package:budget/database/envelopePlanStore.dart';
 import 'package:budget/widgets/selectCategory.dart';
 import 'package:budget/widgets/tappable.dart';
 import 'package:budget/widgets/textInput.dart';
@@ -588,7 +590,22 @@ class _AddTransactionPageState extends State<AddTransactionPage>
             }
           }
           double after = balance - (selectedAmount ?? 0).abs();
-          if (after < 0) {
+          // Минусов не бывает: нехватку в подгруппе закроем из других подгрупп
+          // (после сохранения это делает prepareEnvelopes)
+          bool coveredElsewhere = false;
+          if (after < 0 && !fromFree) {
+            double covered = 0;
+            for (PlanMove move in coverShortage(
+              lines: planLinesOf(balances),
+              pk: selectedEnvelopePk!,
+              shortage: -after,
+              free: balances.free,
+            )) {
+              covered += move.amount;
+            }
+            coveredElsewhere = covered >= -after - 0.005;
+          }
+          if (after < 0 && !coveredElsewhere) {
             String envelopeName = fromFree
                 ? "Свободных"
                 : balances.envelopes
@@ -725,6 +742,9 @@ class _AddTransactionPageState extends State<AddTransactionPage>
         createdTransaction,
         originalTransaction: widget.transaction,
       );
+      if (needsEnvelope) {
+        await database.prepareEnvelopes(selectedWalletPk);
+      }
 
       // Локальная версия: погашение без источника — деньги пришли «извне» и сразу ушли
       // в погашение, поэтому баланс счёта не меняется, а долг уменьшается.

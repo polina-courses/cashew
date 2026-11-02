@@ -117,6 +117,9 @@ Future<Map<String, dynamic>> getDefaultPreferences() async {
     "askForTransactionTitle": true,
     // Локальная версия: категория расхода → счёт по умолчанию {categoryPk: walletPk}
     "categoryWalletLinks": <String, dynamic>{},
+    "envelopePlans": <String, dynamic>{},
+    "walletPlans": <String, dynamic>{},
+    "envelopeSweep": <String, dynamic>{},
     "askForTransactionNoteWithTitle": false,
     // Локальная версия: платежи сами не оплачиваются, пока их не отметишь
     "automaticallyPayUpcoming": false,
