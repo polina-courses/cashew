@@ -173,6 +173,19 @@ class _AddTransactionPageState extends State<AddTransactionPage>
       widget.transferBalancePopup == false &&
       widget.selectedType == null &&
       widget.selectedObjective == null;
+  // Локальная версия: новая «чистая» форма расхода — и для создания, и для редактирования
+  // обычного расхода (не доход, не перевод, не кредит/долг, не запись по кредиту)
+  bool get usesExpenseLayout {
+    if (selectedIncome != false || isAddedToLoanObjective) return false;
+    if (widget.transaction == null) return isSingleFormExpense;
+    Transaction t = widget.transaction!;
+    return t.income == false &&
+        t.categoryFk != "0" &&
+        t.objectiveLoanFk == null &&
+        t.type != TransactionSpecialType.credit &&
+        t.type != TransactionSpecialType.debt;
+  }
+
   late bool isAddedToLoanObjective =
       widget.selectedObjective?.type == ObjectiveType.loan ||
           widget.transaction?.objectiveLoanFk != null;
@@ -2463,12 +2476,14 @@ class _AddTransactionPageState extends State<AddTransactionPage>
         title: widget.transaction == null
             ? isAddedToLoanObjective
                 ? "add-record".tr()
-                : (isSingleFormExpense && selectedIncome == false)
+                : usesExpenseLayout
                     ? "Новый расход"
                     : "add-transaction".tr()
             : isAddedToLoanObjective
                 ? "edit-record".tr()
-                : "edit-transaction".tr(),
+                : usesExpenseLayout
+                    ? "Редактирование расхода"
+                    : "edit-transaction".tr(),
         dragDownToDismiss: true,
         onBackButton: () async {
           if (widget.transaction != null) {
@@ -2622,7 +2637,7 @@ class _AddTransactionPageState extends State<AddTransactionPage>
             ),
           ),
         ),
-        listWidgets: isSingleFormExpense && selectedIncome == false
+        listWidgets: usesExpenseLayout
             ? buildSingleFormExpenseWidgets(context)
             : [
           enableDoubleColumn(context) == false
