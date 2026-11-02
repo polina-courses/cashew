@@ -1237,6 +1237,203 @@ class _AddTransactionPageState extends State<AddTransactionPage>
     );
   }
 
+  // Локальная версия: «повторять каждые N … до даты» (для периодических платежей и подписок)
+  Widget buildRecurrenceSettings(BuildContext context) {
+    return AnimatedExpanded(
+        expand: selectedType == TransactionSpecialType.repetitive ||
+            selectedType == TransactionSpecialType.subscription,
+        child: Padding(
+          padding: const EdgeInsetsDirectional.only(bottom: 9),
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsetsDirectional.only(top: 5),
+                child: Wrap(
+                  alignment: WrapAlignment.center,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    TextFont(
+                      text: "repeat-every".tr(),
+                      fontSize: 23,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        TappableTextEntry(
+                          addTappableBackground: true,
+                          title: selectedPeriodLength.toString(),
+                          placeholder: "0",
+                          showPlaceHolderWhenTextEquals: "0",
+                          onTap: () {
+                            selectPeriodLength(
+                              context: context,
+                              selectedPeriodLength:
+                                  selectedPeriodLength,
+                              setSelectedPeriodLength: (period) =>
+                                  setSelectedPeriodLength(
+                                period: period,
+                                selectedRecurrence: selectedRecurrence,
+                                setPeriodLength: (selectedPeriodLength,
+                                    selectedRecurrenceDisplay) {
+                                  this.selectedPeriodLength =
+                                      selectedPeriodLength;
+                                  this.selectedRecurrenceDisplay =
+                                      selectedRecurrenceDisplay;
+                                  setState(() {});
+                                },
+                              ),
+                            );
+                          },
+                          fontSize: 23,
+                          fontWeight: FontWeight.bold,
+                          internalPadding:
+                              EdgeInsetsDirectional.symmetric(
+                                  vertical: 4, horizontal: 6),
+                          padding: EdgeInsetsDirectional.symmetric(
+                              vertical: 0, horizontal: 4),
+                        ),
+                        TappableTextEntry(
+                          addTappableBackground: true,
+                          title: selectedRecurrenceDisplay
+                              .toString()
+                              .toLowerCase()
+                              .tr()
+                              .toLowerCase(),
+                          placeholder: "",
+                          onTap: () {
+                            selectRecurrence(
+                              context: context,
+                              selectedRecurrence: selectedRecurrence,
+                              selectedPeriodLength:
+                                  selectedPeriodLength,
+                              onChanged: (selectedRecurrence,
+                                  selectedRecurrenceEnum,
+                                  selectedRecurrenceDisplay) {
+                                this.selectedRecurrence =
+                                    selectedRecurrence;
+                                this.selectedRecurrenceEnum =
+                                    selectedRecurrenceEnum;
+                                this.selectedRecurrenceDisplay =
+                                    selectedRecurrenceDisplay;
+                                setState(() {});
+                              },
+                            );
+                          },
+                          fontSize: 23,
+                          fontWeight: FontWeight.bold,
+                          internalPadding:
+                              EdgeInsetsDirectional.symmetric(
+                                  vertical: 4, horizontal: 6),
+                          padding: EdgeInsetsDirectional.symmetric(
+                              vertical: 0, horizontal: 3),
+                        ),
+                      ],
+                    )
+                  ],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsetsDirectional.only(bottom: 5),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    AnimatedExpanded(
+                      expand: selectedEndDate != null,
+                      axis: Axis.horizontal,
+                      child: TextFont(
+                        text: "until".tr(),
+                        fontSize: 23,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    Flexible(
+                      child: TappableTextEntry(
+                        title: (selectedEndDate == null
+                            ? ""
+                            : getWordedDateShort(
+                                selectedEndDate!,
+                                includeYear: selectedEndDate!.year !=
+                                    DateTime.now().year,
+                              )),
+                        placeholder: selectedObjectiveLoanPk != null
+                            ? "until-loan-reached".tr()
+                            : selectedObjectivePk != null
+                                ? "until-goal-reached".tr()
+                                : "until-forever".tr(),
+                        showPlaceHolderWhenTextEquals: "",
+                        onTap: () {
+                          selectEndDate(context);
+                        },
+                        fontSize: 23,
+                        fontWeight: FontWeight.bold,
+                        internalPadding:
+                            EdgeInsetsDirectional.symmetric(
+                                vertical: 5, horizontal: 4),
+                        padding: EdgeInsetsDirectional.symmetric(
+                            vertical: 0, horizontal: 5),
+                      ),
+                    ),
+                    Builder(builder: (context) {
+                      int? numberRepeats = widget.transaction
+                                  ?.createdAnotherFutureTransaction ==
+                              true
+                          ? null
+                          : countTransactionOccurrences(
+                              type: selectedType,
+                              reoccurrence: selectedRecurrenceEnum,
+                              periodLength: selectedPeriodLength,
+                              dateCreated: selectedDate,
+                              endDate: selectedEndDate,
+                            );
+                      return AnimatedSizeSwitcher(
+                        child: numberRepeats != null
+                            ? Padding(
+                                padding: const EdgeInsetsDirectional
+                                    .symmetric(horizontal: 4),
+                                child: TextFont(
+                                  key: ValueKey(1),
+                                  fontSize: 14.5,
+                                  textColor:
+                                      getColor(context, "textLight"),
+                                  text: "( ×" +
+                                      numberRepeats.toString() +
+                                      " )",
+                                ),
+                              )
+                            : Container(
+                                key: ValueKey(2),
+                              ),
+                      );
+                    }),
+                    AnimatedSizeSwitcher(
+                      child: selectedEndDate != null
+                          ? Opacity(
+                              key: ValueKey(1),
+                              opacity: 0.5,
+                              child: IconButtonScaled(
+                                tooltip: "clear".tr(),
+                                iconData: Icons.close_rounded,
+                                iconSize: 16,
+                                scale: 1.5,
+                                onTap: () {
+                                  setSelectedEndDate(null);
+                                },
+                              ),
+                            )
+                          : Container(
+                              key: ValueKey(2),
+                            ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+  }
+
   // Локальная версия: форма нового расхода в одном порядке:
   // название → категория → счёт и подгруппа → сумма → дополнительно → сохранить
   List<Widget> buildSingleFormExpenseWidgets(BuildContext context) {
@@ -1366,17 +1563,34 @@ class _AddTransactionPageState extends State<AddTransactionPage>
       sectionTitle("5. Дополнительно"),
       SelectChips(
         allowMultipleSelected: false,
-        items: <String>["upcoming", "paid-now"],
-        getLabel: (String item) =>
-            item == "upcoming" ? "Предстоящая" : "Уже оплачено",
+        items: <String>["paid-now", "upcoming", "repetitive", "subscription"],
+        getLabel: (String item) => item == "paid-now"
+            ? "Уже оплачено"
+            : item == "upcoming"
+                ? "Предстоящая"
+                : item == "repetitive"
+                    ? "Периодическая"
+                    : "Подписка",
         getSelected: (String item) =>
-            (item == "upcoming") == (selectedType == TransactionSpecialType.upcoming),
+            selectedType ==
+            (item == "paid-now"
+                ? null
+                : item == "upcoming"
+                    ? TransactionSpecialType.upcoming
+                    : item == "repetitive"
+                        ? TransactionSpecialType.repetitive
+                        : TransactionSpecialType.subscription),
         onSelected: (String item) {
-          setSelectedType(item == "upcoming"
-              ? transactionTypeDisplayToEnum[TransactionSpecialType.upcoming]
-              : transactionTypeDisplayToEnum[null]);
+          setSelectedType(transactionTypeDisplayToEnum[item == "paid-now"
+              ? null
+              : item == "upcoming"
+                  ? TransactionSpecialType.upcoming
+                  : item == "repetitive"
+                      ? TransactionSpecialType.repetitive
+                      : TransactionSpecialType.subscription]);
         },
       ),
+      buildRecurrenceSettings(context),
       SizedBox(height: 6),
       Padding(
         padding: const EdgeInsetsDirectional.symmetric(horizontal: 10),
@@ -1579,199 +1793,7 @@ class _AddTransactionPageState extends State<AddTransactionPage>
                   ),
                 ),
               ),
-              AnimatedExpanded(
-                expand: selectedType == TransactionSpecialType.repetitive ||
-                    selectedType == TransactionSpecialType.subscription,
-                child: Padding(
-                  padding: const EdgeInsetsDirectional.only(bottom: 9),
-                  child: Column(
-                    children: [
-                      Padding(
-                        padding: const EdgeInsetsDirectional.only(top: 5),
-                        child: Wrap(
-                          alignment: WrapAlignment.center,
-                          crossAxisAlignment: WrapCrossAlignment.center,
-                          children: [
-                            TextFont(
-                              text: "repeat-every".tr(),
-                              fontSize: 23,
-                              fontWeight: FontWeight.bold,
-                            ),
-                            Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                TappableTextEntry(
-                                  addTappableBackground: true,
-                                  title: selectedPeriodLength.toString(),
-                                  placeholder: "0",
-                                  showPlaceHolderWhenTextEquals: "0",
-                                  onTap: () {
-                                    selectPeriodLength(
-                                      context: context,
-                                      selectedPeriodLength:
-                                          selectedPeriodLength,
-                                      setSelectedPeriodLength: (period) =>
-                                          setSelectedPeriodLength(
-                                        period: period,
-                                        selectedRecurrence: selectedRecurrence,
-                                        setPeriodLength: (selectedPeriodLength,
-                                            selectedRecurrenceDisplay) {
-                                          this.selectedPeriodLength =
-                                              selectedPeriodLength;
-                                          this.selectedRecurrenceDisplay =
-                                              selectedRecurrenceDisplay;
-                                          setState(() {});
-                                        },
-                                      ),
-                                    );
-                                  },
-                                  fontSize: 23,
-                                  fontWeight: FontWeight.bold,
-                                  internalPadding:
-                                      EdgeInsetsDirectional.symmetric(
-                                          vertical: 4, horizontal: 6),
-                                  padding: EdgeInsetsDirectional.symmetric(
-                                      vertical: 0, horizontal: 4),
-                                ),
-                                TappableTextEntry(
-                                  addTappableBackground: true,
-                                  title: selectedRecurrenceDisplay
-                                      .toString()
-                                      .toLowerCase()
-                                      .tr()
-                                      .toLowerCase(),
-                                  placeholder: "",
-                                  onTap: () {
-                                    selectRecurrence(
-                                      context: context,
-                                      selectedRecurrence: selectedRecurrence,
-                                      selectedPeriodLength:
-                                          selectedPeriodLength,
-                                      onChanged: (selectedRecurrence,
-                                          selectedRecurrenceEnum,
-                                          selectedRecurrenceDisplay) {
-                                        this.selectedRecurrence =
-                                            selectedRecurrence;
-                                        this.selectedRecurrenceEnum =
-                                            selectedRecurrenceEnum;
-                                        this.selectedRecurrenceDisplay =
-                                            selectedRecurrenceDisplay;
-                                        setState(() {});
-                                      },
-                                    );
-                                  },
-                                  fontSize: 23,
-                                  fontWeight: FontWeight.bold,
-                                  internalPadding:
-                                      EdgeInsetsDirectional.symmetric(
-                                          vertical: 4, horizontal: 6),
-                                  padding: EdgeInsetsDirectional.symmetric(
-                                      vertical: 0, horizontal: 3),
-                                ),
-                              ],
-                            )
-                          ],
-                        ),
-                      ),
-                      Padding(
-                        padding: const EdgeInsetsDirectional.only(bottom: 5),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            AnimatedExpanded(
-                              expand: selectedEndDate != null,
-                              axis: Axis.horizontal,
-                              child: TextFont(
-                                text: "until".tr(),
-                                fontSize: 23,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            Flexible(
-                              child: TappableTextEntry(
-                                title: (selectedEndDate == null
-                                    ? ""
-                                    : getWordedDateShort(
-                                        selectedEndDate!,
-                                        includeYear: selectedEndDate!.year !=
-                                            DateTime.now().year,
-                                      )),
-                                placeholder: selectedObjectiveLoanPk != null
-                                    ? "until-loan-reached".tr()
-                                    : selectedObjectivePk != null
-                                        ? "until-goal-reached".tr()
-                                        : "until-forever".tr(),
-                                showPlaceHolderWhenTextEquals: "",
-                                onTap: () {
-                                  selectEndDate(context);
-                                },
-                                fontSize: 23,
-                                fontWeight: FontWeight.bold,
-                                internalPadding:
-                                    EdgeInsetsDirectional.symmetric(
-                                        vertical: 5, horizontal: 4),
-                                padding: EdgeInsetsDirectional.symmetric(
-                                    vertical: 0, horizontal: 5),
-                              ),
-                            ),
-                            Builder(builder: (context) {
-                              int? numberRepeats = widget.transaction
-                                          ?.createdAnotherFutureTransaction ==
-                                      true
-                                  ? null
-                                  : countTransactionOccurrences(
-                                      type: selectedType,
-                                      reoccurrence: selectedRecurrenceEnum,
-                                      periodLength: selectedPeriodLength,
-                                      dateCreated: selectedDate,
-                                      endDate: selectedEndDate,
-                                    );
-                              return AnimatedSizeSwitcher(
-                                child: numberRepeats != null
-                                    ? Padding(
-                                        padding: const EdgeInsetsDirectional
-                                            .symmetric(horizontal: 4),
-                                        child: TextFont(
-                                          key: ValueKey(1),
-                                          fontSize: 14.5,
-                                          textColor:
-                                              getColor(context, "textLight"),
-                                          text: "( ×" +
-                                              numberRepeats.toString() +
-                                              " )",
-                                        ),
-                                      )
-                                    : Container(
-                                        key: ValueKey(2),
-                                      ),
-                              );
-                            }),
-                            AnimatedSizeSwitcher(
-                              child: selectedEndDate != null
-                                  ? Opacity(
-                                      key: ValueKey(1),
-                                      opacity: 0.5,
-                                      child: IconButtonScaled(
-                                        tooltip: "clear".tr(),
-                                        iconData: Icons.close_rounded,
-                                        iconSize: 16,
-                                        scale: 1.5,
-                                        onTap: () {
-                                          setSelectedEndDate(null);
-                                        },
-                                      ),
-                                    )
-                                  : Container(
-                                      key: ValueKey(2),
-                                    ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
+              buildRecurrenceSettings(context),
               // Wallet picker is in Select Amount... consider removing?
               Provider.of<AllWallets>(context).list.length <= 1
                   ? SizedBox.shrink()
