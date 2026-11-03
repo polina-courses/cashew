@@ -1530,11 +1530,13 @@ class SelectEnvelopeChips extends StatelessWidget {
     required this.selectedEnvelopePk,
     required this.onSelected,
     required this.editingTransaction,
+    this.newEnvelopeName,
     super.key,
   });
   final TransactionWallet wallet;
   final String? selectedEnvelopePk;
   final Function(String envelopePk) onSelected;
+  final String? newEnvelopeName; // название новой подгруппы (если выбрана)
   // Редактируемая трата: её сумма уже учтена в остатке, при показе возвращаем
   final Transaction? editingTransaction;
 
@@ -1563,7 +1565,10 @@ class SelectEnvelopeChips extends StatelessWidget {
                 children: [
                   ChoiceChip(
                     avatar: Icon(Icons.add_rounded, size: 18),
-                    label: Text("Новая подгруппа"),
+                    label: Text(selectedEnvelopePk == newEnvelopeKey &&
+                            (newEnvelopeName ?? "").isNotEmpty
+                        ? "Новая: " + newEnvelopeName!
+                        : "Новая подгруппа"),
                     selected: selectedEnvelopePk == newEnvelopeKey,
                     onSelected: (_) => onSelected(newEnvelopeKey),
                   ),
@@ -1761,6 +1766,67 @@ class _EnvelopeArchiveSheetState extends State<EnvelopeArchiveSheet> {
             ],
           );
         },
+      ),
+    );
+  }
+}
+
+
+/// Спрашивает название новой подгруппы. Возвращает null, если отменили.
+Future<String?> askNewEnvelopeName(BuildContext context, String suggested) async {
+  dynamic result = await openBottomSheet(
+    context,
+    _NewEnvelopeNameSheet(suggested: suggested),
+    popupWithKeyboard: true,
+  );
+  return result is String ? result : null;
+}
+
+class _NewEnvelopeNameSheet extends StatefulWidget {
+  const _NewEnvelopeNameSheet({required this.suggested});
+  final String suggested;
+
+  @override
+  State<_NewEnvelopeNameSheet> createState() => _NewEnvelopeNameSheetState();
+}
+
+class _NewEnvelopeNameSheetState extends State<_NewEnvelopeNameSheet> {
+  late TextEditingController controller =
+      TextEditingController(text: widget.suggested);
+
+  @override
+  void dispose() {
+    controller.dispose();
+    super.dispose();
+  }
+
+  void submit() {
+    String name = controller.text.trim();
+    if (name.isEmpty) return;
+    popRoute(context, name);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return PopupFramework(
+      title: "Новая подгруппа",
+      child: Column(
+        children: [
+          TextInput(
+            labelText: "Название подгруппы",
+            controller: controller,
+            autoFocus: true,
+            padding: EdgeInsetsDirectional.zero,
+            textCapitalization: TextCapitalization.sentences,
+            onSubmitted: (_) => submit(),
+          ),
+          SizedBox(height: 15),
+          Button(
+            label: "Создать",
+            expandedLayout: true,
+            onTap: submit,
+          ),
+        ],
       ),
     );
   }

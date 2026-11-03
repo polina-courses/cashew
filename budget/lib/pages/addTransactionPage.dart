@@ -238,7 +238,23 @@ class _AddTransactionPageState extends State<AddTransactionPage>
       selectedCategory?.categoryPk != "0" &&
       !isAddedToLoanObjective;
 
-  void setSelectedEnvelopePk(String? envelopePk) {
+  String? newEnvelopeName;
+
+  Future<void> setSelectedEnvelopePk(String? envelopePk) async {
+    if (envelopePk == newEnvelopeKey) {
+      // Новая подгруппа: спрашиваем название (по умолчанию — название расхода или категории)
+      String title = (selectedTitle ?? "").trim();
+      String suggested = (newEnvelopeName ?? "").isNotEmpty
+          ? newEnvelopeName!
+          : (title.isNotEmpty ? title : (selectedCategory?.name ?? ""));
+      String? name = await askNewEnvelopeName(context, suggested);
+      if (name == null) return;
+      setState(() {
+        newEnvelopeName = name;
+        selectedEnvelopePk = envelopePk;
+      });
+      return;
+    }
     setState(() {
       selectedEnvelopePk = envelopePk;
     });
@@ -581,14 +597,17 @@ class _AddTransactionPageState extends State<AddTransactionPage>
             envelopeWallet != null) {
           String? picked = await pickEnvelope(context, envelopeWallet);
           if (picked == null) return false;
-          setSelectedEnvelopePk(picked);
+          await setSelectedEnvelopePk(picked);
+          if (selectedEnvelopePk == null) return false;
         }
         if (selectedEnvelopePk == newEnvelopeKey ||
             (isPeriodicExpense && selectedEnvelopePk == null)) {
           String title = (selectedTitle ?? "").trim();
           selectedEnvelopePk = await database.ensureScheduleEnvelope(
             walletPk: selectedWalletPk,
-            name: title.isEmpty ? selectedCategory!.name : title,
+            name: (newEnvelopeName ?? "").trim().isNotEmpty
+                ? newEnvelopeName!.trim()
+                : (title.isEmpty ? selectedCategory!.name : title),
             categoryPk: selectedCategory!.categoryPk,
             temporary: isPeriodicExpense && selectedEndDate != null,
           );
@@ -1612,6 +1631,7 @@ class _AddTransactionPageState extends State<AddTransactionPage>
             selectedEnvelopePk: selectedEnvelopePk ??
                 (isPeriodicExpense ? newEnvelopeKey : null),
             onSelected: setSelectedEnvelopePk,
+            newEnvelopeName: newEnvelopeName,
             editingTransaction: widget.transaction,
           ),
         if (isPeriodicExpense && (selectedEnvelopePk ?? newEnvelopeKey) == newEnvelopeKey)
@@ -2502,6 +2522,7 @@ class _AddTransactionPageState extends State<AddTransactionPage>
               selectedEnvelopePk: selectedEnvelopePk ??
                   (isPeriodicExpense ? newEnvelopeKey : null),
               onSelected: setSelectedEnvelopePk,
+              newEnvelopeName: newEnvelopeName,
               editingTransaction: widget.transaction,
             ),
         ],
@@ -2618,7 +2639,7 @@ class _AddTransactionPageState extends State<AddTransactionPage>
                                 String? picked =
                                     await pickEnvelope(context, wallet);
                                 if (picked != null)
-                                  setSelectedEnvelopePk(picked);
+                                  await setSelectedEnvelopePk(picked);
                               },
                             )
                           : selectedAmount == null
