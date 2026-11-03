@@ -237,6 +237,7 @@ extension EnvelopePlanQueries on FinanceDatabase {
     required String name,
     required String categoryPk,
     required bool temporary,
+    EnvelopePriority priority = EnvelopePriority.medium,
   }) async {
     Map<String, dynamic> meta = _mapSetting("envelopeMeta");
     String wanted = name.trim();
@@ -256,6 +257,7 @@ extension EnvelopePlanQueries on FinanceDatabase {
     String pk = (await getEnvelopes(walletPk)).last.envelopePk;
     meta[pk] = {"c": categoryPk, "t": temporary};
     await updateSettings("envelopeMeta", meta, updateGlobalState: false);
+    await setEnvelopePriority(pk, priority);
     return pk;
   }
 

@@ -40,6 +40,8 @@ import 'package:budget/widgets/radioItems.dart';
 import 'package:budget/widgets/selectAmount.dart';
 import 'package:budget/struct/categoryWalletLinks.dart';
 import 'package:budget/struct/envelopePlan.dart';
+import 'package:budget/struct/categoryAccounts.dart';
+import 'package:budget/widgets/categoryTopUp.dart';
 import 'package:budget/database/envelopePlanStore.dart';
 import 'package:budget/widgets/selectCategory.dart';
 import 'package:budget/widgets/tappable.dart';
@@ -239,6 +241,7 @@ class _AddTransactionPageState extends State<AddTransactionPage>
       !isAddedToLoanObjective;
 
   String? newEnvelopeName;
+  EnvelopePriority newEnvelopePriority = EnvelopePriority.medium;
 
   Future<void> setSelectedEnvelopePk(String? envelopePk) async {
     if (envelopePk == newEnvelopeKey) {
@@ -247,10 +250,12 @@ class _AddTransactionPageState extends State<AddTransactionPage>
       String suggested = (newEnvelopeName ?? "").isNotEmpty
           ? newEnvelopeName!
           : (title.isNotEmpty ? title : (selectedCategory?.name ?? ""));
-      String? name = await askNewEnvelopeName(context, suggested);
-      if (name == null) return;
+      var asked = await askNewEnvelopeName(context, suggested,
+          priority: newEnvelopePriority);
+      if (asked == null) return;
       setState(() {
-        newEnvelopeName = name;
+        newEnvelopeName = asked.name;
+        newEnvelopePriority = asked.priority;
         selectedEnvelopePk = envelopePk;
       });
       return;
@@ -311,6 +316,17 @@ class _AddTransactionPageState extends State<AddTransactionPage>
           Provider.of<AllWallets>(context, listen: false));
       if (linked != null && linked != selectedWalletPk) {
         setSelectedWalletPk(linked, manual: false);
+      } else if (linked == null) {
+        // Счёта у категории ещё нет — создаём (название = категория)
+        ensureCategoryWallet(category).then((wallet) {
+          if (!mounted || selectedCategory?.categoryPk != category.categoryPk) {
+            return;
+          }
+          if (wallet.walletPk != selectedWalletPk &&
+              walletChosenManually == false) {
+            setSelectedWalletPk(wallet.walletPk, manual: false);
+          }
+        });
       }
     }
     return;
@@ -610,6 +626,7 @@ class _AddTransactionPageState extends State<AddTransactionPage>
                 : (title.isEmpty ? selectedCategory!.name : title),
             categoryPk: selectedCategory!.categoryPk,
             temporary: isPeriodicExpense && selectedEndDate != null,
+            priority: newEnvelopePriority,
           );
         }
         if (selectedEnvelopePk == null) return false;
@@ -829,6 +846,21 @@ class _AddTransactionPageState extends State<AddTransactionPage>
             wallet: distributeWallet,
             amount: transactionJustAdded.amount,
             sourceTransactionPk: transactionJustAdded.transactionPk,
+          );
+        } else if (widget.transaction == null &&
+            distributeWallet != null &&
+            transactionJustAdded.income &&
+            transactionJustAdded.paid &&
+            transactionJustAdded.amount > 0 &&
+            transactionJustAdded.categoryFk != "0" &&
+            !getCategoryWalletLinks()
+                .values
+                .contains(distributeWallet.walletPk)) {
+          // Доход на общий счёт: предложить пополнить счета категорий
+          await openTopUpSheet(
+            context,
+            source: distributeWallet,
+            incomeAmount: transactionJustAdded.amount,
           );
         }
 

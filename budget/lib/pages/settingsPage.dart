@@ -1,6 +1,7 @@
 import 'package:budget/colors.dart';
 import 'package:budget/database/tables.dart' hide AppSettings;
 import 'package:budget/pages/aboutPage.dart';
+import 'package:budget/widgets/categoryTopUp.dart';
 import 'package:budget/pages/addTransactionPage.dart';
 import 'package:budget/pages/billSplitter.dart';
 import 'package:budget/pages/budgetsListPage.dart';
@@ -116,6 +117,12 @@ class MoreActionsPageState extends State<MoreActionsPage> {
         ],
         listWidgets: [
           // Локальная версия: проверка обновлений из GitHub Releases
+          SettingsContainer(
+            title: "Пополнить счета категорий",
+            description: "Распределить деньги с общего счёта по категориям",
+            icon: Icons.account_balance_wallet_outlined,
+            onTap: () => openTopUpSheet(context),
+          ),
           AppUpdateSettingsTile(),
           MorePages()
         ],

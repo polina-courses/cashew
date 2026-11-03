@@ -384,6 +384,14 @@ class _EnvelopesList extends StatelessWidget {
                           fontSize: 16,
                           maxLines: 1,
                         ),
+                        TextFont(
+                          text: "приоритет: " +
+                              envelopePriorityLabel(
+                                      getEnvelopePriority(envelope.envelopePk))
+                                  .toLowerCase(),
+                          fontSize: 12,
+                          textColor: getColor(context, "textLight"),
+                        ),
                         if (isTemporaryEnvelope(envelope.envelopePk))
                           TextFont(
                             text: "временная, пока есть платежи",
@@ -1773,18 +1781,24 @@ class _EnvelopeArchiveSheetState extends State<EnvelopeArchiveSheet> {
 
 
 /// Спрашивает название новой подгруппы. Возвращает null, если отменили.
-Future<String?> askNewEnvelopeName(BuildContext context, String suggested) async {
+Future<({String name, EnvelopePriority priority})?> askNewEnvelopeName(
+    BuildContext context, String suggested,
+    {EnvelopePriority priority = EnvelopePriority.medium}) async {
   dynamic result = await openBottomSheet(
     context,
-    _NewEnvelopeNameSheet(suggested: suggested),
+    _NewEnvelopeNameSheet(suggested: suggested, priority: priority),
     popupWithKeyboard: true,
   );
-  return result is String ? result : null;
+  if (result is List && result.length == 2) {
+    return (name: result[0] as String, priority: result[1] as EnvelopePriority);
+  }
+  return null;
 }
 
 class _NewEnvelopeNameSheet extends StatefulWidget {
-  const _NewEnvelopeNameSheet({required this.suggested});
+  const _NewEnvelopeNameSheet({required this.suggested, required this.priority});
   final String suggested;
+  final EnvelopePriority priority;
 
   @override
   State<_NewEnvelopeNameSheet> createState() => _NewEnvelopeNameSheetState();
@@ -1793,6 +1807,7 @@ class _NewEnvelopeNameSheet extends StatefulWidget {
 class _NewEnvelopeNameSheetState extends State<_NewEnvelopeNameSheet> {
   late TextEditingController controller =
       TextEditingController(text: widget.suggested);
+  late EnvelopePriority priority = widget.priority;
 
   @override
   void dispose() {
@@ -1803,7 +1818,7 @@ class _NewEnvelopeNameSheetState extends State<_NewEnvelopeNameSheet> {
   void submit() {
     String name = controller.text.trim();
     if (name.isEmpty) return;
-    popRoute(context, name);
+    popRoute(context, [name, priority]);
   }
 
   @override
@@ -1819,6 +1834,29 @@ class _NewEnvelopeNameSheetState extends State<_NewEnvelopeNameSheet> {
             padding: EdgeInsetsDirectional.zero,
             textCapitalization: TextCapitalization.sentences,
             onSubmitted: (_) => submit(),
+          ),
+          SizedBox(height: 12),
+          Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: TextFont(
+                text: "Приоритет пополнения",
+                fontSize: 13,
+                textColor: getColor(context, "textLight")),
+          ),
+          SizedBox(height: 6),
+          Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: Wrap(
+              spacing: 8,
+              children: [
+                for (EnvelopePriority p in EnvelopePriority.values)
+                  ChoiceChip(
+                    label: Text(envelopePriorityLabel(p)),
+                    selected: priority == p,
+                    onSelected: (_) => setState(() => priority = p),
+                  ),
+              ],
+            ),
           ),
           SizedBox(height: 15),
           Button(
