@@ -10,7 +10,7 @@ import 'dart:math';
 
 import 'package:budget/database/envelopes.dart';
 import 'package:budget/database/tables.dart';
-import 'package:drift/drift.dart' show Value;
+import 'package:drift/drift.dart';
 import 'package:budget/struct/envelopePlan.dart';
 import 'package:budget/struct/settings.dart';
 
