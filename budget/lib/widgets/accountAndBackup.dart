@@ -874,7 +874,7 @@ class _BackupManagementState extends State<BackupManagement> {
               : "overwrite-warning".tr(),
       child: Column(
         children: [
-          widget.isClientSync && kIsWeb == false
+          false
               ? Row(
                   children: [
                     Expanded(

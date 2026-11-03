@@ -236,7 +236,7 @@ class _ImportCSVState extends State<ImportCSV> {
         context,
         PopupFramework(
           hasPadding: false,
-          outsideExtraWidget: appStateSettings["showFAQAndHelpLink"] == true
+          outsideExtraWidget: false
               ? OutsideExtraWidgetIconButton(
                   iconData: appStateSettings["outlinedIcons"]
                       ? Icons.live_help_outlined
@@ -563,7 +563,7 @@ class _ImportCSVState extends State<ImportCSV> {
             }
           },
           placeholder:
-              "https://docs.google.com/spreadsheets/d/1Eiib2fiaC8SNdau8T8TBQql-wyWXVYOLJY-7Ycuky4I/edit?usp=sharing",
+              "https://docs.google.com/spreadsheets/d/…",
           autoFocus: true,
         ),
       ),
@@ -782,8 +782,6 @@ class _CustomDateFormatInputState extends State<CustomDateFormatInput> {
 }
 
 getGoogleSheetTemplate(BuildContext context) {
-  openUrl(
-      "https://docs.google.com/spreadsheets/d/1Eiib2fiaC8SNdau8T8TBQql-wyWXVYOLJY-7Ycuky4I/edit?usp=sharing");
   openPopup(
     context,
     icon: appStateSettings["outlinedIcons"]

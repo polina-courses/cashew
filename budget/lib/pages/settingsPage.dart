@@ -100,7 +100,7 @@ class MoreActionsPageState extends State<MoreActionsPage> {
             showButtons: true,
             keepOutFirst: true,
             items: [
-              if (appStateSettings["showFAQAndHelpLink"] == true)
+              if (false)
                 DropdownItemMenu(
                   id: "open-faq",
                   label: "faq".tr(),

@@ -99,7 +99,7 @@ class _RatingPopupState extends State<RatingPopup> {
                     }
                   },
                 ),
-                if (appStateSettings["showFAQAndHelpLink"] == true)
+                if (false)
                   HorizontalBreak(
                     padding: EdgeInsetsDirectional.zero,
                     color: appStateSettings["materialYou"]
@@ -111,7 +111,7 @@ class _RatingPopupState extends State<RatingPopup> {
                           )
                         : getColor(context, "lightDarkAccent"),
                   ),
-                if (appStateSettings["showFAQAndHelpLink"] == true)
+                if (false)
                   LinkInNotes(
                     color: (appStateSettings["materialYou"]
                         ? Theme.of(context).colorScheme.secondaryContainer

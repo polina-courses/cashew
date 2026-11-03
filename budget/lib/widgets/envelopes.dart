@@ -243,6 +243,67 @@ class _EmptyEnvelopes extends StatelessWidget {
   }
 }
 
+/// Строка «сколько нужно» для подгруппы (null, если платежей и целей нет).
+String? envelopeNeedLabel(
+    BuildContext context, TransactionWallet wallet, PlanLine line) {
+  if (line.scheduled <= 0 &&
+      line.longRequired <= 0 &&
+      line.goalRequired <= 0 &&
+      line.wish <= 0) return null;
+  if (line.need <= 0 && line.wish > 0) {
+    return "Цель без срока, по возможности: осталось " +
+        envelopeMoney(context, wallet, line.wish);
+  }
+  return "Нужно к концу месяца: " +
+      envelopeMoney(context, wallet,
+          line.scheduled + line.longRequired + line.goalRequired) +
+      (line.need > 0
+          ? " · добавить " + envelopeMoney(context, wallet, line.need)
+          : " · пополнение не нужно");
+}
+
+class _CategoryHeader extends StatelessWidget {
+  const _CategoryHeader(
+      {required this.wallet, required this.categoryPk, required this.need});
+  final TransactionWallet wallet;
+  final String? categoryPk;
+  final double need;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsetsDirectional.only(top: 10, bottom: 2),
+      child: Row(
+        children: [
+          Expanded(
+            child: categoryPk == null
+                ? TextFont(
+                    text: "Без категории",
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    textColor: getColor(context, "textLight"))
+                : FutureBuilder<TransactionCategory?>(
+                    future: database.getCategoryInstanceOrNull(categoryPk!),
+                    builder: (context, snapshot) => TextFont(
+                      text: snapshot.data?.name ?? "",
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                      textColor: getColor(context, "textLight"),
+                    ),
+                  ),
+          ),
+          if (need > 0)
+            TextFont(
+              text: "добавить " + envelopeMoney(context, wallet, need),
+              fontSize: 12,
+              textColor: getColor(context, "textLight"),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
 class _EnvelopesList extends StatelessWidget {
   const _EnvelopesList({required this.wallet, required this.data});
   final TransactionWallet wallet;
@@ -250,6 +311,28 @@ class _EnvelopesList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    return FutureBuilder<Map<String, ScheduledInfo>>(
+      future: getScheduledForMonth(database, wallet.walletPk),
+      builder: (context, snapshot) =>
+          buildList(context, snapshot.data ?? <String, ScheduledInfo>{}),
+    );
+  }
+
+  Widget buildList(BuildContext context, Map<String, ScheduledInfo> scheduled) {
+    List<PlanLine> lines = planLinesOf(data, scheduled);
+    PlanLine lineOf(Envelope e) => lines.firstWhere((l) => l.pk == e.envelopePk);
+    // Подгруппы по категориям: сначала сгруппированные, затем без категории
+    List<String?> categoryOrder = [];
+    for (Envelope e in data.envelopes) {
+      String? c = getEnvelopeCategoryPk(e.envelopePk);
+      if (!categoryOrder.contains(c)) categoryOrder.add(c);
+    }
+    categoryOrder.sort((a, b) => (a == null ? 1 : 0) - (b == null ? 1 : 0));
+    List<Envelope> sorted = [
+      for (String? c in categoryOrder)
+        ...data.envelopes
+            .where((e) => getEnvelopeCategoryPk(e.envelopePk) == c)
+    ];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -269,7 +352,20 @@ class _EnvelopesList extends StatelessWidget {
             ),
           ],
         ),
-        for (Envelope envelope in data.envelopes)
+        for (Envelope envelope in sorted) ...[
+          if (sorted.indexWhere((e) =>
+                  getEnvelopeCategoryPk(e.envelopePk) ==
+                  getEnvelopeCategoryPk(envelope.envelopePk)) ==
+              sorted.indexOf(envelope))
+            _CategoryHeader(
+              wallet: wallet,
+              categoryPk: getEnvelopeCategoryPk(envelope.envelopePk),
+              need: sorted
+                  .where((e) =>
+                      getEnvelopeCategoryPk(e.envelopePk) ==
+                      getEnvelopeCategoryPk(envelope.envelopePk))
+                  .fold<double>(0, (sum, e) => sum + lineOf(e).need),
+            ),
           Tappable(
             color: Colors.transparent,
             borderRadius: 10,
@@ -288,18 +384,21 @@ class _EnvelopesList extends StatelessWidget {
                           fontSize: 16,
                           maxLines: 1,
                         ),
-                        if (getEnvelopeCategoryPk(envelope.envelopePk) != null)
-                          FutureBuilder<TransactionCategory?>(
-                            future: database.getCategoryInstanceOrNull(
-                                getEnvelopeCategoryPk(envelope.envelopePk)!),
-                            builder: (context, snapshot) => TextFont(
-                              text: (snapshot.data?.name ?? "") +
-                                  (isTemporaryEnvelope(envelope.envelopePk)
-                                      ? " · временная"
-                                      : ""),
-                              fontSize: 12,
-                              textColor: getColor(context, "textLight"),
-                            ),
+                        if (isTemporaryEnvelope(envelope.envelopePk))
+                          TextFont(
+                            text: "временная, пока есть платежи",
+                            fontSize: 12,
+                            textColor: getColor(context, "textLight"),
+                          ),
+                        if (envelopeNeedLabel(
+                                context, wallet, lineOf(envelope)) !=
+                            null)
+                          TextFont(
+                            text: envelopeNeedLabel(
+                                context, wallet, lineOf(envelope))!,
+                            fontSize: 12,
+                            maxLines: 2,
+                            textColor: getColor(context, "textLight"),
                           ),
                         if ((envelope.note ?? "").trim().isNotEmpty)
                           Padding(
@@ -340,6 +439,7 @@ class _EnvelopesList extends StatelessWidget {
               ),
             ),
           ),
+        ],
         Tappable(
           color: Colors.transparent,
           borderRadius: 10,
@@ -933,24 +1033,8 @@ class _EnvelopeTableSheetState extends State<EnvelopeTableSheet> {
     return max(0.0, min(deposit, max(0.0, widget.balances.free)));
   }
 
-  String? needTextOf(String envelopePk) {
-    PlanLine line = planLines.firstWhere((l) => l.pk == envelopePk);
-    if (line.scheduled <= 0 &&
-        line.longRequired <= 0 &&
-        line.goalRequired <= 0 &&
-        line.wish <= 0) return null;
-    if (line.need <= 0 && line.wish > 0) {
-      return "Цель без срока, по возможности: осталось " +
-          envelopeMoney(context, widget.wallet, line.wish);
-    }
-    return "Нужно к концу месяца: " +
-        envelopeMoney(context, widget.wallet,
-            line.scheduled + line.longRequired + line.goalRequired) +
-        (line.need > 0
-            ? " · нужно добавить " +
-                envelopeMoney(context, widget.wallet, line.need)
-            : " · пополнение не нужно");
-  }
+  String? needTextOf(String envelopePk) => envelopeNeedLabel(
+      context, widget.wallet, planLines.firstWhere((l) => l.pk == envelopePk));
 
   // Заполнить суммы по потребности и приоритету (их можно поправить руками)
   void applyPlan() {
@@ -1325,6 +1409,8 @@ class EnvelopeTransferSheet extends StatefulWidget {
 
 // Ключ «свободных денег» в выпадающих списках
 const String freeMoneyKey = "__free__";
+// «Новая подгруппа» при создании расхода (создаётся при сохранении)
+const String newEnvelopeKey = "__new__";
 
 class _EnvelopeTransferSheetState extends State<EnvelopeTransferSheet> {
   String? fromKey;
@@ -1458,7 +1544,7 @@ class SelectEnvelopeChips extends StatelessWidget {
       stream: database.watchEnvelopeBalances(wallet.walletPk),
       builder: (context, snapshot) {
         EnvelopeBalances? data = snapshot.data;
-        if (data == null || data.envelopes.isEmpty) return SizedBox.shrink();
+        if (data == null) return SizedBox.shrink();
         return Padding(
           padding: const EdgeInsetsDirectional.only(
               start: 15, end: 15, bottom: 8, top: 2),
@@ -1466,7 +1552,7 @@ class SelectEnvelopeChips extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               TextFont(
-                text: "Откуда списать",
+                text: "Подгруппа для траты",
                 fontSize: 13,
                 textColor: getColor(context, "textLight"),
               ),
@@ -1475,6 +1561,12 @@ class SelectEnvelopeChips extends StatelessWidget {
                 spacing: 6,
                 runSpacing: 6,
                 children: [
+                  ChoiceChip(
+                    avatar: Icon(Icons.add_rounded, size: 18),
+                    label: Text("Новая подгруппа"),
+                    selected: selectedEnvelopePk == newEnvelopeKey,
+                    onSelected: (_) => onSelected(newEnvelopeKey),
+                  ),
                   // Локальная версия: списать из свободных денег счёта
                   ChoiceChip(
                     label: Text("Свободные · " +
@@ -1536,14 +1628,24 @@ double freeBalanceExcludingEditing(
 Future<String?> pickEnvelope(
     BuildContext context, TransactionWallet wallet) async {
   EnvelopeBalances data = await database.getEnvelopeBalances(wallet.walletPk);
-  if (data.envelopes.isEmpty) return null;
   dynamic result = await openBottomSheet(
     context,
     PopupFramework(
-      title: "Откуда списать?",
+      title: "В какую подгруппу?",
       subtitle: wallet.name,
       child: Column(
         children: [
+          Tappable(
+            color: Colors.transparent,
+            borderRadius: 10,
+            onTap: () => popRoute(context, newEnvelopeKey),
+            child: Padding(
+              padding: const EdgeInsetsDirectional.symmetric(
+                  vertical: 12, horizontal: 5),
+              child: TextFont(
+                  text: "＋ Новая подгруппа", fontSize: 17, maxLines: 1),
+            ),
+          ),
           Tappable(
             color: Colors.transparent,
             borderRadius: 10,

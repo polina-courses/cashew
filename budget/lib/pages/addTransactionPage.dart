@@ -215,6 +215,7 @@ class _AddTransactionPageState extends State<AddTransactionPage>
         walletHasEnvelopes = envelopeList.isNotEmpty;
         if (selectedEnvelopePk != null &&
             selectedEnvelopePk != freeMoneyKey &&
+            selectedEnvelopePk != newEnvelopeKey &&
             envelopeList.every((e) => e.envelopePk != selectedEnvelopePk)) {
           selectedEnvelopePk = null;
         }
@@ -233,7 +234,6 @@ class _AddTransactionPageState extends State<AddTransactionPage>
       !isAddedToLoanObjective;
 
   bool get needsEnvelope =>
-      (walletHasEnvelopes || isPeriodicExpense) &&
       selectedIncome == false &&
       selectedCategory?.categoryPk != "0" &&
       !isAddedToLoanObjective;
@@ -576,19 +576,22 @@ class _AddTransactionPageState extends State<AddTransactionPage>
       // Локальная версия: трата со счёта с подгруппами — подгруппа обязательна
       if (needsEnvelope) {
         TransactionWallet? envelopeWallet = getSelectedWallet(listen: false);
-        if (isPeriodicExpense) {
+        if (selectedEnvelopePk == null &&
+            !isPeriodicExpense &&
+            envelopeWallet != null) {
+          String? picked = await pickEnvelope(context, envelopeWallet);
+          if (picked == null) return false;
+          setSelectedEnvelopePk(picked);
+        }
+        if (selectedEnvelopePk == newEnvelopeKey ||
+            (isPeriodicExpense && selectedEnvelopePk == null)) {
           String title = (selectedTitle ?? "").trim();
           selectedEnvelopePk = await database.ensureScheduleEnvelope(
             walletPk: selectedWalletPk,
             name: title.isEmpty ? selectedCategory!.name : title,
             categoryPk: selectedCategory!.categoryPk,
-            temporary: selectedEndDate != null,
+            temporary: isPeriodicExpense && selectedEndDate != null,
           );
-        }
-        if (selectedEnvelopePk == null && envelopeWallet != null) {
-          String? picked = await pickEnvelope(context, envelopeWallet);
-          if (picked == null) return false;
-          setSelectedEnvelopePk(picked);
         }
         if (selectedEnvelopePk == null) return false;
         if (selectedPaid && envelopeWallet != null) {
@@ -1603,17 +1606,18 @@ class _AddTransactionPageState extends State<AddTransactionPage>
             getLabel: (TransactionWallet w) =>
                 getWalletStringName(allWallets, w),
           ),
-        if (needsEnvelope && !isPeriodicExpense && wallet != null)
+        if (needsEnvelope && wallet != null)
           SelectEnvelopeChips(
             wallet: wallet,
-            selectedEnvelopePk: selectedEnvelopePk,
+            selectedEnvelopePk: selectedEnvelopePk ??
+                (isPeriodicExpense ? newEnvelopeKey : null),
             onSelected: setSelectedEnvelopePk,
             editingTransaction: widget.transaction,
           ),
-        if (isPeriodicExpense)
+        if (isPeriodicExpense && (selectedEnvelopePk ?? newEnvelopeKey) == newEnvelopeKey)
           hint(selectedEndDate == null
-              ? "Подгруппа в категории создастся сама"
-              : "Подгруппа создастся сама и исчезнет, когда платежи закончатся"),
+              ? "Новая подгруппа появится в категории"
+              : "Новая подгруппа временная: уйдёт в архив, когда платежи закончатся"),
         if (allWallets.list.length <= 1 && !needsEnvelope)
           hint("Единственный счёт: ${wallet?.name ?? ""}"),
       ],
@@ -2491,12 +2495,12 @@ class _AddTransactionPageState extends State<AddTransactionPage>
             ),
           // Локальная версия: из какой подгруппы счёта трата
           if (needsEnvelope &&
-              !isPeriodicExpense &&
               (selectedCategory != null || !isSingleFormExpense) &&
               getSelectedWallet(listen: true) != null)
             SelectEnvelopeChips(
               wallet: getSelectedWallet(listen: true)!,
-              selectedEnvelopePk: selectedEnvelopePk,
+              selectedEnvelopePk: selectedEnvelopePk ??
+                  (isPeriodicExpense ? newEnvelopeKey : null),
               onSelected: setSelectedEnvelopePk,
               editingTransaction: widget.transaction,
             ),
