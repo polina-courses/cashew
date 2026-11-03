@@ -343,7 +343,7 @@ class AccountsPageState extends State<AccountsPage> {
                       //     ),
                       //   ),
                       false
-                          ? Padding
+                          ? Padding(
                               padding: const EdgeInsetsDirectional.symmetric(
                                   vertical: 20, horizontal: 7),
                               child: Tappable(
