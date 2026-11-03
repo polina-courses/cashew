@@ -862,6 +862,9 @@ class _EnvelopeTableSheetState extends State<EnvelopeTableSheet> {
 
   int get decimals => widget.wallet.decimals;
 
+  double oldOf(Envelope envelope) =>
+      roundToDecimals(widget.balances.balanceOf(envelope.envelopePk), decimals);
+
   List<PlanLine> get planLines =>
       planLinesOf(widget.balances, widget.scheduled);
 
