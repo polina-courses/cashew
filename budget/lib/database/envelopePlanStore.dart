@@ -2,6 +2,7 @@
 // изменения схемы БД) и применение плана к реальным остаткам.
 //
 //   envelopePlans: {envelopePk: {"p": "high|medium|low"}}  — приоритет
+//   envelopeMeta:  {envelopePk: {"c": categoryPk, "t": true}} — категория и «временная» (со сроком)
 //   envelopeSweep: {walletPk: "2026-10"}  — последний месяц, за который сделан перенос остатков
 //
 // Платежи подгруппы — это неоплаченные расходы календаря с этой подгруппой.
@@ -119,6 +120,16 @@ List<PlanLine> planLinesOf(
   ];
 }
 
+String? getEnvelopeCategoryPk(String envelopePk) {
+  final dynamic m = _mapSetting("envelopeMeta")[envelopePk];
+  return m is Map ? m["c"]?.toString() : null;
+}
+
+bool isTemporaryEnvelope(String envelopePk) {
+  final dynamic m = _mapSetting("envelopeMeta")[envelopePk];
+  return m is Map && m["t"] == true;
+}
+
 String _monthKey(DateTime date) =>
     date.year.toString() + "-" + date.month.toString().padLeft(2, "0");
 
@@ -169,8 +180,62 @@ extension EnvelopePlanQueries on FinanceDatabase {
     await updateSettings("envelopeSweep", sweeps, updateGlobalState: false);
   }
 
+  /// Подгруппа для периодического расхода: ищем по названию и категории,
+  /// иначе создаём. Подгруппа «со сроком» временная, без срока — постоянная.
+  Future<String> ensureScheduleEnvelope({
+    required String walletPk,
+    required String name,
+    required String categoryPk,
+    required bool temporary,
+  }) async {
+    Map<String, dynamic> meta = _mapSetting("envelopeMeta");
+    String wanted = name.trim();
+    for (Envelope e in await getEnvelopes(walletPk)) {
+      final dynamic m = meta[e.envelopePk];
+      if (m is Map &&
+          m["c"] == categoryPk &&
+          e.name.trim().toLowerCase() == wanted.toLowerCase()) {
+        if (!temporary && m["t"] == true) {
+          meta[e.envelopePk] = {"c": categoryPk, "t": false};
+          await updateSettings("envelopeMeta", meta, updateGlobalState: false);
+        }
+        return e.envelopePk;
+      }
+    }
+    await createEnvelope(walletPk: walletPk, name: wanted, percent: 0);
+    String pk = (await getEnvelopes(walletPk)).last.envelopePk;
+    meta[pk] = {"c": categoryPk, "t": temporary};
+    await updateSettings("envelopeMeta", meta, updateGlobalState: false);
+    return pk;
+  }
+
+  /// Временные подгруппы, по которым не осталось платежей, удаляем
+  /// (остаток уходит в «Свободные»).
+  Future<void> removeFinishedTemporaryEnvelopes(String walletPk) async {
+    Map<String, dynamic> meta = _mapSetting("envelopeMeta");
+    for (Envelope e in await getEnvelopes(walletPk)) {
+      final dynamic m = meta[e.envelopePk];
+      if (m is! Map || m["t"] != true) continue;
+      List<Transaction> left = await (select(transactions)
+            ..where((t) =>
+                t.envelopeFk.equals(e.envelopePk) &
+                t.paid.equals(false) &
+                t.skipPaid.equals(false) &
+                (t.type.equals(TransactionSpecialType.upcoming.index) |
+                    t.type.equals(TransactionSpecialType.repetitive.index) |
+                    t.type.equals(TransactionSpecialType.subscription.index)))
+            ..limit(1))
+          .get();
+      if (left.isNotEmpty) continue;
+      await deleteEnvelope(e);
+      meta.remove(e.envelopePk);
+      await updateSettings("envelopeMeta", meta, updateGlobalState: false);
+    }
+  }
+
   /// Привести подгруппы счёта в порядок: перенос остатков и закрытие минусов.
   Future<void> prepareEnvelopes(String walletPk) async {
+    await removeFinishedTemporaryEnvelopes(walletPk);
     await sweepEnvelopesIfMonthChanged(walletPk);
     await fixNegativeEnvelopes(walletPk);
   }

@@ -288,6 +288,19 @@ class _EnvelopesList extends StatelessWidget {
                           fontSize: 16,
                           maxLines: 1,
                         ),
+                        if (getEnvelopeCategoryPk(envelope.envelopePk) != null)
+                          FutureBuilder<TransactionCategory?>(
+                            future: database.getCategoryInstanceOrNull(
+                                getEnvelopeCategoryPk(envelope.envelopePk)!),
+                            builder: (context, snapshot) => TextFont(
+                              text: (snapshot.data?.name ?? "") +
+                                  (isTemporaryEnvelope(envelope.envelopePk)
+                                      ? " · временная"
+                                      : ""),
+                              fontSize: 12,
+                              textColor: getColor(context, "textLight"),
+                            ),
+                          ),
                         if ((envelope.note ?? "").trim().isNotEmpty)
                           Padding(
                             padding: const EdgeInsetsDirectional.only(

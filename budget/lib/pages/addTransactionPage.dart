@@ -223,8 +223,17 @@ class _AddTransactionPageState extends State<AddTransactionPage>
   }
 
   // Трата со счёта с подгруппами требует выбрать подгруппу (переводы между счетами — нет)
+  // Периодический расход сам создаёт подгруппу в категории (название = название расхода)
+  bool get isPeriodicExpense =>
+      selectedIncome == false &&
+      (selectedType == TransactionSpecialType.repetitive ||
+          selectedType == TransactionSpecialType.subscription) &&
+      selectedCategory != null &&
+      selectedCategory!.categoryPk != "0" &&
+      !isAddedToLoanObjective;
+
   bool get needsEnvelope =>
-      walletHasEnvelopes &&
+      (walletHasEnvelopes || isPeriodicExpense) &&
       selectedIncome == false &&
       selectedCategory?.categoryPk != "0" &&
       !isAddedToLoanObjective;
@@ -567,6 +576,15 @@ class _AddTransactionPageState extends State<AddTransactionPage>
       // Локальная версия: трата со счёта с подгруппами — подгруппа обязательна
       if (needsEnvelope) {
         TransactionWallet? envelopeWallet = getSelectedWallet(listen: false);
+        if (isPeriodicExpense) {
+          String title = (selectedTitle ?? "").trim();
+          selectedEnvelopePk = await database.ensureScheduleEnvelope(
+            walletPk: selectedWalletPk,
+            name: title.isEmpty ? selectedCategory!.name : title,
+            categoryPk: selectedCategory!.categoryPk,
+            temporary: selectedEndDate != null,
+          );
+        }
         if (selectedEnvelopePk == null && envelopeWallet != null) {
           String? picked = await pickEnvelope(context, envelopeWallet);
           if (picked == null) return false;
@@ -1585,13 +1603,17 @@ class _AddTransactionPageState extends State<AddTransactionPage>
             getLabel: (TransactionWallet w) =>
                 getWalletStringName(allWallets, w),
           ),
-        if (needsEnvelope && wallet != null)
+        if (needsEnvelope && !isPeriodicExpense && wallet != null)
           SelectEnvelopeChips(
             wallet: wallet,
             selectedEnvelopePk: selectedEnvelopePk,
             onSelected: setSelectedEnvelopePk,
             editingTransaction: widget.transaction,
           ),
+        if (isPeriodicExpense)
+          hint(selectedEndDate == null
+              ? "Подгруппа в категории создастся сама"
+              : "Подгруппа создастся сама и исчезнет, когда платежи закончатся"),
         if (allWallets.list.length <= 1 && !needsEnvelope)
           hint("Единственный счёт: ${wallet?.name ?? ""}"),
       ],
@@ -2469,6 +2491,7 @@ class _AddTransactionPageState extends State<AddTransactionPage>
             ),
           // Локальная версия: из какой подгруппы счёта трата
           if (needsEnvelope &&
+              !isPeriodicExpense &&
               (selectedCategory != null || !isSingleFormExpense) &&
               getSelectedWallet(listen: true) != null)
             SelectEnvelopeChips(
@@ -2580,7 +2603,7 @@ class _AddTransactionPageState extends State<AddTransactionPage>
                             );
                           },
                         )
-                      : needsEnvelope && selectedEnvelopePk == null
+                      : needsEnvelope && !isPeriodicExpense && selectedEnvelopePk == null
                           ? Button(
                               hasBottomExtraSafeArea: true,
                               label: "Выбрать, откуда списать",

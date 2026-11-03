@@ -120,6 +120,7 @@ Future<Map<String, dynamic>> getDefaultPreferences() async {
     "envelopePlans": <String, dynamic>{},
     "walletPlans": <String, dynamic>{},
     "envelopeSweep": <String, dynamic>{},
+    "envelopeMeta": <String, dynamic>{},
     "askForTransactionNoteWithTitle": false,
     // Локальная версия: платежи сами не оплачиваются, пока их не отметишь
     "automaticallyPayUpcoming": false,
