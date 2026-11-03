@@ -453,16 +453,9 @@ class _EnvelopeEditorState extends State<EnvelopeEditor> {
           : formatNumberForInput(
               widget.envelope!.targetAmount!, widget.wallet.decimals));
   late DateTime? targetDate = widget.envelope?.targetDate;
-  late EnvelopeKind planKind = widget.envelope == null
-      ? EnvelopeKind.none
-      : getEnvelopePlan(widget.envelope!.envelopePk).kind;
-  late TextEditingController planAmountController = TextEditingController(
-      text: widget.envelope == null ||
-              getEnvelopePlan(widget.envelope!.envelopePk).amount == 0
-          ? ""
-          : formatNumberForInput(
-              getEnvelopePlan(widget.envelope!.envelopePk).amount,
-              widget.wallet.decimals));
+  late EnvelopePriority priority = widget.envelope == null
+      ? EnvelopePriority.medium
+      : getEnvelopePriority(widget.envelope!.envelopePk);
   late TextEditingController noteController =
       TextEditingController(text: widget.envelope?.note ?? "");
   double currentBalance = 0;
@@ -486,7 +479,6 @@ class _EnvelopeEditorState extends State<EnvelopeEditor> {
     nameController.dispose();
     percentController.dispose();
     targetController.dispose();
-    planAmountController.dispose();
     noteController.dispose();
     super.dispose();
   }
@@ -540,27 +532,6 @@ class _EnvelopeEditorState extends State<EnvelopeEditor> {
           "%");
       return;
     }
-    double planAmount = parseEnvelopeNumber(planAmountController.text) ?? 0;
-    if (planAmount < 0) planAmount = 0;
-    if (planKind == EnvelopeKind.accumulating &&
-        (parsedTarget == null || targetDate == null)) {
-      setState(() => error = "Для накопления укажите сумму и дату цели");
-      return;
-    }
-    if ((planKind == EnvelopeKind.monthly || planKind == EnvelopeKind.weekly) &&
-        planAmount <= 0) {
-      setState(() => error = "Укажите сумму в плане");
-      return;
-    }
-    if (planKind == EnvelopeKind.reserve) {
-      for (Envelope other in others) {
-        if (getEnvelopePlan(other.envelopePk).kind == EnvelopeKind.reserve) {
-          setState(() => error =
-              "«Непредвиденное» уже есть: «" + other.name + "». Оно может быть одно на счёт");
-          return;
-        }
-      }
-    }
     String savedPk;
     if (widget.envelope == null) {
       await database.createEnvelope(
@@ -584,12 +555,7 @@ class _EnvelopeEditorState extends State<EnvelopeEditor> {
         note: Value(noteText),
       ));
     }
-    await setEnvelopePlan(
-        savedPk,
-        planKind,
-        (planKind == EnvelopeKind.monthly || planKind == EnvelopeKind.weekly)
-            ? planAmount
-            : 0);
+    await setEnvelopePriority(savedPk, priority);
     popRoute(context);
   }
 
@@ -636,7 +602,7 @@ class _EnvelopeEditorState extends State<EnvelopeEditor> {
           Align(
             alignment: AlignmentDirectional.centerStart,
             child: TextFont(
-              text: "Как пополнять",
+              text: "Приоритет пополнения",
               fontSize: 15,
               fontWeight: FontWeight.bold,
             ),
@@ -645,46 +611,24 @@ class _EnvelopeEditorState extends State<EnvelopeEditor> {
           Wrap(
             spacing: 8,
             children: [
-              for (EnvelopeKind kind in EnvelopeKind.values)
+              for (EnvelopePriority p in EnvelopePriority.values)
                 ChoiceChip(
-                  label: Text(envelopeKindLabel(kind)),
-                  selected: planKind == kind,
-                  onSelected: (_) => setState(() => planKind = kind),
+                  label: Text(envelopePriorityLabel(p)),
+                  selected: priority == p,
+                  onSelected: (_) => setState(() => priority = p),
                 ),
             ],
           ),
-          if (planKind == EnvelopeKind.monthly ||
-              planKind == EnvelopeKind.weekly) ...[
-            SizedBox(height: 10),
-            TextInput(
-              labelText: planKind == EnvelopeKind.monthly
-                  ? "Сумма в месяц"
-                  : "Сумма в неделю",
-              controller: planAmountController,
-              padding: EdgeInsetsDirectional.zero,
-              keyboardType: TextInputType.numberWithOptions(decimal: true),
+          Padding(
+            padding: const EdgeInsetsDirectional.only(top: 6),
+            child: TextFont(
+              text:
+                  "Платежи подгруппы берутся из календаря: выберите эту подгруппу при добавлении расхода.",
+              fontSize: 12,
+              maxLines: 3,
+              textColor: getColor(context, "textLight"),
             ),
-          ],
-          if (planKind == EnvelopeKind.accumulating)
-            Padding(
-              padding: const EdgeInsetsDirectional.only(top: 8),
-              child: TextFont(
-                text: "Задайте сумму и дату цели ниже — ежемесячный взнос посчитается сам.",
-                fontSize: 12,
-                maxLines: 3,
-                textColor: getColor(context, "textLight"),
-              ),
-            ),
-          if (planKind == EnvelopeKind.reserve)
-            Padding(
-              padding: const EdgeInsetsDirectional.only(top: 8),
-              child: TextFont(
-                text: "Сюда уходят остатки и всё, что не распределено по плану. Нехватку в других подгруппах тоже покрывает она.",
-                fontSize: 12,
-                maxLines: 4,
-                textColor: getColor(context, "textLight"),
-              ),
-            ),
+          ),
           SizedBox(height: 10),
           TextInput(
             labelText: "Доля при пополнении, % (необязательно)",
@@ -868,6 +812,7 @@ Future openEnvelopeTableSheet(BuildContext context,
       balances: balances,
       incomeAmount: incomeAmount,
       sourceTransactionPk: sourceTransactionPk,
+      scheduled: await getScheduledForMonth(database, wallet.walletPk),
     ),
     popupWithKeyboard: true,
     fullSnap: true,
@@ -896,10 +841,12 @@ class EnvelopeTableSheet extends StatefulWidget {
     required this.balances,
     this.incomeAmount,
     this.sourceTransactionPk,
+    this.scheduled = const {},
     super.key,
   });
   final TransactionWallet wallet;
   final EnvelopeBalances balances;
+  final Map<String, double> scheduled; // платежи календаря на месяц по подгруппам
   final double? incomeAmount;
   final String? sourceTransactionPk;
 
@@ -910,13 +857,15 @@ class EnvelopeTableSheet extends StatefulWidget {
 class _EnvelopeTableSheetState extends State<EnvelopeTableSheet> {
   late Map<String, double> values; // новые суммы подгрупп
   late Map<String, TextEditingController> controllers;
-  late TextEditingController planSumController;
   double planShortfall = 0;
   bool planApplied = false;
 
   int get decimals => widget.wallet.decimals;
 
-  bool get hasPlan => walletHasPlan(widget.balances);
+  List<PlanLine> get planLines =>
+      planLinesOf(widget.balances, widget.scheduled);
+
+  bool get hasPlan => planLines.any((l) => l.need > 0);
 
   // Деньги, которые раскладываем: пополнение или все свободные
   double get amountToSplit {
@@ -924,10 +873,24 @@ class _EnvelopeTableSheetState extends State<EnvelopeTableSheet> {
     return max(0.0, min(deposit, max(0.0, widget.balances.free)));
   }
 
-  // Заполнить суммы по плану (их можно поправить руками)
+  String? needTextOf(String envelopePk) {
+    PlanLine line = planLines.firstWhere((l) => l.pk == envelopePk);
+    if (line.scheduled <= 0 && line.goalMonthly <= 0) return null;
+    return "Платежи в этом месяце: " +
+        envelopeMoney(context, widget.wallet, line.scheduled) +
+        (line.need > 0
+            ? " · нужно добавить " +
+                envelopeMoney(context, widget.wallet, line.need)
+            : " · пополнение не нужно");
+  }
+
+  // Заполнить суммы по потребности и приоритету (их можно поправить руками)
   void applyPlan() {
-    double plannedSum = parseEnvelopeNumber(planSumController.text) ?? 0;
-    PlanResult result = computePlan(plannedSum);
+    PlanResult result = planDeposit(
+      lines: planLines,
+      deposit: amountToSplit,
+      decimals: decimals,
+    );
     setState(() {
       for (Envelope envelope in widget.balances.envelopes) {
         setValue(envelope.envelopePk,
@@ -938,28 +901,11 @@ class _EnvelopeTableSheetState extends State<EnvelopeTableSheet> {
     });
   }
 
-  PlanResult computePlan(double plannedSum) {
-    return planDeposit(
-      lines: planLinesOf(widget.balances),
-      deposit: amountToSplit,
-      share: receiptShare(DateTime.now()),
-      plannedSum: plannedSum,
-      month: DateTime.now(),
-      decimals: decimals,
-    );
-  }
-
-  double oldOf(Envelope envelope) =>
-      roundToDecimals(widget.balances.balanceOf(envelope.envelopePk), decimals);
-
   @override
   void initState() {
     super.initState();
     values = {};
     controllers = {};
-    double savedSum = getWalletPlannedSum(widget.balances.walletPk);
-    planSumController = TextEditingController(
-        text: savedSum == 0 ? "" : formatNumberForInput(savedSum, decimals));
     for (Envelope envelope in widget.balances.envelopes) {
       double current = oldOf(envelope);
       values[envelope.envelopePk] = current;
@@ -979,7 +925,6 @@ class _EnvelopeTableSheetState extends State<EnvelopeTableSheet> {
     for (TextEditingController controller in controllers.values) {
       controller.dispose();
     }
-    planSumController.dispose();
     super.dispose();
   }
 
@@ -1072,8 +1017,6 @@ class _EnvelopeTableSheetState extends State<EnvelopeTableSheet> {
   }
 
   bool get hasChanges {
-    if ((parseEnvelopeNumber(planSumController.text) ?? 0) !=
-        getWalletPlannedSum(widget.wallet.walletPk)) return true;
     for (Envelope envelope in widget.balances.envelopes) {
       if ((values[envelope.envelopePk] ?? 0) != oldOf(envelope)) return true;
     }
@@ -1084,8 +1027,6 @@ class _EnvelopeTableSheetState extends State<EnvelopeTableSheet> {
   // увеличенным (переложить), остаток берётся из свободных или возвращается в них.
   Future<void> save() async {
     if (freeAfter < 0 || !hasChanges) return;
-    await setWalletPlannedSum(widget.wallet.walletPk,
-        parseEnvelopeNumber(planSumController.text) ?? 0);
     Map<String, double> take = {};
     Map<String, double> give = {};
     for (Envelope envelope in widget.balances.envelopes) {
@@ -1153,17 +1094,10 @@ class _EnvelopeTableSheetState extends State<EnvelopeTableSheet> {
             fontSize: 14,
             textColor: getColor(context, "textLight"),
           ),
-          SizedBox(height: 8),
-          TextInput(
-            labelText: "План счёта на месяц (всего)",
-            controller: planSumController,
-            padding: EdgeInsetsDirectional.zero,
-            keyboardType: TextInputType.numberWithOptions(decimal: true),
-          ),
           if (hasPlan) ...[
             SizedBox(height: 8),
             Button(
-              label: "Заполнить по плану",
+              label: "Заполнить по календарю и приоритетам",
               expandedLayout: true,
               onTap: applyPlan,
             ),
@@ -1174,7 +1108,7 @@ class _EnvelopeTableSheetState extends State<EnvelopeTableSheet> {
               child: TextFont(
                 text: "Не хватает " +
                     envelopeMoney(context, widget.wallet, planShortfall) +
-                    " до плана на это поступление",
+                    " до потребности на месяц",
                 fontSize: 14,
                 maxLines: 2,
                 textColor: getColor(context, "expenseAmount"),
@@ -1209,6 +1143,13 @@ class _EnvelopeTableSheetState extends State<EnvelopeTableSheet> {
                           fontSize: 12,
                           textColor: getColor(context, "textLight"),
                         ),
+                        if (needTextOf(envelope.envelopePk) != null)
+                          TextFont(
+                            text: needTextOf(envelope.envelopePk)!,
+                            fontSize: 12,
+                            maxLines: 2,
+                            textColor: getColor(context, "textLight"),
+                          ),
                         if (envelopeGoalProgressText(
                                 context,
                                 widget.wallet,

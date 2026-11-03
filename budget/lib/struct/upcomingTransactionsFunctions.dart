@@ -1,3 +1,4 @@
+import 'package:budget/database/envelopePlanStore.dart';
 import 'package:budget/database/tables.dart';
 import 'package:budget/functions.dart';
 import 'package:budget/pages/addTransactionPage.dart';
@@ -280,10 +281,28 @@ Future openPayPopup(
       //   );
       //   amount = amount.abs() * (transaction.income ? 1 : -1);
       // }
+      // Локальная версия: из подгруппы без денег и без свободных оплатить нельзя
+      String? blockReason = await database.envelopePayBlockReason(transaction);
+      if (blockReason != null) {
+        popRoute(context);
+        await openPopup(
+          navigatorKey.currentContext ?? context,
+          title: blockReason,
+          description:
+              "В подгруппе не хватает денег, а свободных на счёте нет. Пополните подгруппу или счёт, потом отметьте оплату.",
+          icon: Icons.warning_amber_rounded,
+          onSubmitLabel: "Понятно",
+          onSubmit: () => popRoute(navigatorKey.currentContext ?? context),
+        );
+        return;
+      }
       popRoute(context);
       await markAsPaid(
         transaction: transaction,
       );
+      if (transaction.envelopeFk != null) {
+        await database.prepareEnvelopes(transaction.walletFk);
+      }
     },
   );
 }

@@ -1,140 +1,88 @@
-// Локальная версия: тесты плана распределения по подгруппам (чистая логика).
+// Локальная версия: тесты логики подгрупп (потребность, приоритеты, «Свободные»).
 
 import 'package:budget/struct/envelopePlan.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-PlanLine line(String pk, EnvelopeKind kind,
+PlanLine line(String pk,
     {double balance = 0,
-    double amount = 0,
-    double? target,
-    DateTime? date}) {
+    double scheduled = 0,
+    double goalMonthly = 0,
+    bool hasGoal = false,
+    EnvelopePriority priority = EnvelopePriority.medium}) {
   return PlanLine(
       pk: pk,
-      kind: kind,
       balance: balance,
-      amount: amount,
-      targetAmount: target,
-      targetDate: date);
+      scheduled: scheduled,
+      goalMonthly: goalMonthly,
+      hasGoal: hasGoal,
+      priority: priority);
 }
 
 void main() {
-  test('недель в календарном месяце — число понедельников', () {
-    expect(weeksInMonth(2026, 10), 4);
-    expect(weeksInMonth(2026, 11), 5);
-    expect(weeksInMonth(2026, 2), 4);
-  });
-
-  test('доля поступления: 12-е — 2/3, 25-е — 1/3', () {
-    expect(receiptShare(DateTime(2026, 10, 12)), closeTo(2 / 3, 1e-9));
-    expect(receiptShare(DateTime(2026, 10, 25)), closeTo(1 / 3, 1e-9));
-    expect(receiptShare(DateTime(2026, 10, 3)), closeTo(2 / 3, 1e-9));
-    expect(receiptShare(DateTime(2026, 10, 30)), closeTo(1 / 3, 1e-9));
-  });
-
-  test('потребность: месяц, неделя, накопление', () {
-    DateTime october = DateTime(2026, 10, 12);
-    expect(monthlyNeed(line("a", EnvelopeKind.monthly, amount: 6000), october),
-        6000);
-    expect(monthlyNeed(line("b", EnvelopeKind.weekly, amount: 300), october),
-        1200);
-    expect(
-        monthlyNeed(
-            line("c", EnvelopeKind.accumulating,
-                balance: 0, target: 3000, date: DateTime(2026, 12, 20)),
-            october),
-        1000);
-    expect(monthlyNeed(line("r", EnvelopeKind.reserve), october), 0);
-  });
-
-  List<PlanLine> animals() => [
-        line("food", EnvelopeKind.monthly, amount: 6000),
-        line("meds", EnvelopeKind.monthly, amount: 2000),
-        line("toys", EnvelopeKind.weekly, amount: 300),
-        line("shots", EnvelopeKind.accumulating,
-            target: 3000, date: DateTime(2026, 12, 20)),
-        line("reserve", EnvelopeKind.reserve),
-      ];
-
-  test('зарплата 12-го: 2/3 потребностей, остаток в «Непредвиденное»', () {
-    PlanResult result = planDeposit(
-      lines: animals(),
-      deposit: 8000,
-      share: 2 / 3,
-      month: DateTime(2026, 10, 12),
-      plannedSum: 10200,
-    );
-    expect(result.amounts["food"], 4000);
-    expect(result.amounts["meds"], closeTo(1333.33, 0.01));
-    expect(result.amounts["toys"], 800);
-    expect(result.amounts["shots"], closeTo(666.67, 0.01));
-    expect(result.amounts["reserve"], closeTo(1200, 0.02));
-    expect(result.shortfall, 0);
-    double sum = result.amounts.values.fold(0.0, (a, b) => a + b);
-    expect(sum, closeTo(8000, 0.02));
-  });
-
-  test('денег мало: накопления получают только остаток, есть недобор', () {
-    PlanResult result = planDeposit(
-      lines: animals(),
-      deposit: 5500,
-      share: 2 / 3,
-      month: DateTime(2026, 10, 12),
-    );
-    expect(result.amounts["food"], 4000);
-    expect(result.amounts["meds"], closeTo(1333.33, 0.01));
-    expect(result.amounts["toys"], closeTo(166.67, 0.01));
-    expect(result.amounts["shots"], 0);
-    expect(result.amounts["reserve"], 0);
-    expect(result.shortfall, closeTo(1300, 0.02));
-  });
-
-  test('минус в подгруппе закрывается первым', () {
-    List<PlanLine> lines = [
-      line("food", EnvelopeKind.monthly, amount: 600, balance: -100),
-      line("reserve", EnvelopeKind.reserve),
-    ];
-    PlanResult result = planDeposit(
-      lines: lines,
-      deposit: 1000,
-      share: 1,
-      month: DateTime(2026, 10, 12),
-    );
-    expect(result.amounts["food"], 700);
-    expect(result.amounts["reserve"], 300);
-  });
-
-  test('нехватка: сначала «Непредвиденное», потом текущие, потом накопления',
+  test('карманные: 5 понедельников = 1250, после первого платежа пополнение не нужно',
       () {
-    List<PlanLine> lines = [
-      line("food", EnvelopeKind.monthly, balance: -500),
-      line("meds", EnvelopeKind.monthly, balance: 300),
-      line("shots", EnvelopeKind.accumulating, balance: 1000),
-      line("reserve", EnvelopeKind.reserve, balance: 200),
-      line("manual", EnvelopeKind.none, balance: 9999),
-    ];
-    List<PlanMove> moves =
-        coverShortage(lines: lines, pk: "food", shortage: 500, free: 50);
-    expect(moves.map((m) => m.from).toList(), ["reserve", "meds"]);
-    expect(moves[0].amount, 200);
-    expect(moves[1].amount, 300);
-
-    List<PlanMove> more =
-        coverShortage(lines: lines, pk: "food", shortage: 1400, free: 50);
-    expect(more.map((m) => m.from).toList(), ["reserve", "meds", "shots"]);
-    expect(more[2].amount, 900);
+    // начало месяца: лежит 1250, впереди 5 платежей по 250
+    expect(line("p", balance: 1250, scheduled: 1250).need, 0);
+    // отметили первый платёж: лежит 1000, впереди 4 платежа
+    expect(line("p", balance: 1000, scheduled: 1000).need, 0);
+    // лежит только 750 при 1250 впереди — нужно 500
+    expect(line("p", balance: 750, scheduled: 1250).need, 500);
   });
 
-  test('конец месяца: остатки текущих строк уходят в «Непредвиденное»', () {
-    List<PlanLine> lines = [
-      line("food", EnvelopeKind.monthly, balance: 400),
-      line("toys", EnvelopeKind.weekly, balance: 0),
-      line("shots", EnvelopeKind.accumulating, balance: 1000),
-      line("reserve", EnvelopeKind.reserve, balance: 100),
-    ];
-    List<PlanMove> moves = sweepMonthEnd(lines: lines);
+  test('зарплата 750 + аванс 500 закрывают 1250 по частям', () {
+    PlanResult salary = planDeposit(
+        lines: [line("p", scheduled: 1250)], deposit: 750);
+    expect(salary.amounts["p"], 750);
+    expect(salary.shortfall, 500);
+    PlanResult advance = planDeposit(
+        lines: [line("p", balance: 750, scheduled: 1250)], deposit: 500);
+    expect(advance.amounts["p"], 500);
+    expect(advance.shortfall, 0);
+  });
+
+  test('приоритеты: сначала высокий, потом средний, потом низкий', () {
+    PlanResult result = planDeposit(lines: [
+      line("low", scheduled: 1000, priority: EnvelopePriority.low),
+      line("high", scheduled: 1000, priority: EnvelopePriority.high),
+      line("mid", scheduled: 1000, priority: EnvelopePriority.medium),
+    ], deposit: 1500);
+    expect(result.amounts["high"], 1000);
+    expect(result.amounts["mid"], 500);
+    expect(result.amounts["low"], 0);
+    expect(result.shortfall, 1500);
+  });
+
+  test('лишние деньги не раскладываются: остаются свободными', () {
+    PlanResult result = planDeposit(
+        lines: [line("a", scheduled: 300), line("b", scheduled: 200)],
+        deposit: 1000);
+    expect(result.amounts["a"], 300);
+    expect(result.amounts["b"], 200);
+    expect(result.shortfall, 0);
+  });
+
+  test('цель добавляет ежемесячный взнос к потребности', () {
+    expect(line("g", scheduled: 100, goalMonthly: 1000, hasGoal: true).need,
+        1100);
+  });
+
+  test('нехватка закрывается только из свободных', () {
+    expect(freeCovers(300, 300), true);
+    expect(freeCovers(300, 299), false);
+    expect(takeFromFree(300, 200), 200);
+    expect(takeFromFree(300, 500), 300);
+    expect(takeFromFree(300, -5), 0);
+  });
+
+  test('конец месяца: остатки уходят в свободные, цели остаются', () {
+    List<PlanMove> moves = sweepMonthEnd(lines: [
+      line("pocket", balance: 250),
+      line("goal", balance: 5000, hasGoal: true),
+      line("empty", balance: 0),
+    ]);
     expect(moves.length, 1);
-    expect(moves.single.from, "food");
-    expect(moves.single.to, "reserve");
-    expect(moves.single.amount, 400);
+    expect(moves.single.from, "pocket");
+    expect(moves.single.to, null);
+    expect(moves.single.amount, 250);
   });
 }

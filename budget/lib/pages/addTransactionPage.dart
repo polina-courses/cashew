@@ -590,20 +590,24 @@ class _AddTransactionPageState extends State<AddTransactionPage>
             }
           }
           double after = balance - (selectedAmount ?? 0).abs();
-          // Минусов не бывает: нехватку в подгруппе закроем из других подгрупп
-          // (после сохранения это делает prepareEnvelopes)
+          // Минусов не бывает: нехватку в подгруппе закрывают «Свободные»
+          // (после сохранения это делает prepareEnvelopes). Нет свободных — не сохраняем.
           bool coveredElsewhere = false;
           if (after < 0 && !fromFree) {
-            double covered = 0;
-            for (PlanMove move in coverShortage(
-              lines: planLinesOf(balances),
-              pk: selectedEnvelopePk!,
-              shortage: -after,
-              free: balances.free,
-            )) {
-              covered += move.amount;
+            if (freeCovers(-after, balances.free)) {
+              coveredElsewhere = true;
+            } else {
+              await openPopup<bool>(
+                context,
+                title: "Нет свободных денег",
+                description:
+                    "В подгруппе не хватает денег, а свободных на счёте нет. Пополните подгруппу или счёт.",
+                icon: Icons.warning_amber_rounded,
+                onSubmitLabel: "Понятно",
+                onSubmit: () => popRoute(context, false),
+              );
+              return false;
             }
-            coveredElsewhere = covered >= -after - 0.005;
           }
           if (after < 0 && !coveredElsewhere) {
             String envelopeName = fromFree
