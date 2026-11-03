@@ -11,6 +11,7 @@
 import 'dart:async';
 
 import 'package:budget/database/tables.dart';
+import 'package:budget/struct/settings.dart';
 import 'package:drift/drift.dart';
 
 class EnvelopeBalances {
@@ -43,15 +44,34 @@ class EnvelopeBalances {
   }
 }
 
+/// Подгруппа в архиве (хранится в настройках `envelopeMeta`, поле "a").
+bool isEnvelopeArchived(String envelopePk) {
+  final dynamic meta = appStateSettings["envelopeMeta"];
+  if (meta is Map) {
+    final dynamic m = meta[envelopePk];
+    return m is Map && m["a"] == true;
+  }
+  return false;
+}
+
 extension EnvelopeQueries on FinanceDatabase {
   Stream<List<Envelope>> watchEnvelopes(String walletPk) {
     return (select(envelopes)
           ..where((e) => e.walletFk.equals(walletPk))
           ..orderBy([(e) => OrderingTerm.asc(e.order)]))
-        .watch();
+        .watch()
+        .map((list) =>
+            list.where((e) => !isEnvelopeArchived(e.envelopePk)).toList());
   }
 
-  Future<List<Envelope>> getEnvelopes(String walletPk) {
+  /// Подгруппы счёта без архивных.
+  Future<List<Envelope>> getEnvelopes(String walletPk) async {
+    return (await getEnvelopesIncludingArchived(walletPk))
+        .where((e) => !isEnvelopeArchived(e.envelopePk))
+        .toList();
+  }
+
+  Future<List<Envelope>> getEnvelopesIncludingArchived(String walletPk) {
     return (select(envelopes)
           ..where((e) => e.walletFk.equals(walletPk))
           ..orderBy([(e) => OrderingTerm.asc(e.order)]))
@@ -71,7 +91,10 @@ extension EnvelopeQueries on FinanceDatabase {
     DateTime? targetDate,
     String? note,
   }) async {
-    int count = (await getEnvelopes(walletPk)).length;
+    int count = 0;
+    for (Envelope e in await getEnvelopesIncludingArchived(walletPk)) {
+      if (e.order >= count) count = e.order + 1;
+    }
     await into(envelopes).insert(EnvelopesCompanion.insert(
       walletFk: walletPk,
       name: name.trim(),

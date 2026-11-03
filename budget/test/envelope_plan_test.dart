@@ -6,14 +6,18 @@ import 'package:flutter_test/flutter_test.dart';
 PlanLine line(String pk,
     {double balance = 0,
     double scheduled = 0,
-    double goalMonthly = 0,
+    double goalRequired = 0,
+    double longRequired = 0,
+    double wish = 0,
     bool hasGoal = false,
     EnvelopePriority priority = EnvelopePriority.medium}) {
   return PlanLine(
       pk: pk,
       balance: balance,
       scheduled: scheduled,
-      goalMonthly: goalMonthly,
+      goalRequired: goalRequired,
+      longRequired: longRequired,
+      wish: wish,
       hasGoal: hasGoal,
       priority: priority);
 }
@@ -61,9 +65,35 @@ void main() {
     expect(result.shortfall, 0);
   });
 
-  test('цель добавляет ежемесячный взнос к потребности', () {
-    expect(line("g", scheduled: 100, goalMonthly: 1000, hasGoal: true).need,
+  test('цель со сроком и копилка под редкие платежи входят в потребность', () {
+    expect(line("g", scheduled: 100, goalRequired: 1000, hasGoal: true).need,
         1100);
+    expect(line("y", longRequired: 3000, balance: 2000).need, 1000);
+  });
+
+  test('зарплата даёт 2/3 потребности, аванс — всё оставшееся', () {
+    expect(receiptShare(DateTime(2026, 11, 12)), closeTo(2 / 3, 1e-9));
+    expect(receiptShare(DateTime(2026, 11, 25)), 1.0);
+    PlanResult salary = planDeposit(
+        lines: [line("p", scheduled: 1250)], deposit: 5000, share: 2 / 3);
+    expect(salary.amounts["p"], closeTo(833.33, 0.01));
+    PlanResult advance = planDeposit(
+        lines: [line("p", balance: 833.33, scheduled: 1250)], deposit: 5000);
+    expect(advance.amounts["p"], closeTo(416.67, 0.01));
+  });
+
+  test('цели без срока получают деньги последними, из остатка', () {
+    PlanResult result = planDeposit(lines: [
+      line("a", scheduled: 500),
+      line("wish", wish: 3000),
+    ], deposit: 2000);
+    expect(result.amounts["a"], 500);
+    expect(result.amounts["wish"], 1500);
+    PlanResult tight = planDeposit(lines: [
+      line("a", scheduled: 500),
+      line("wish", wish: 3000),
+    ], deposit: 400);
+    expect(tight.amounts["wish"], 0);
   });
 
   test('нехватка закрывается только из свободных', () {

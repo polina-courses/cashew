@@ -34,18 +34,28 @@ class PlanLine {
     required this.balance,
     this.priority = EnvelopePriority.medium,
     this.scheduled = 0,
-    this.goalMonthly = 0,
+    this.longRequired = 0,
+    this.goalRequired = 0,
     this.hasGoal = false,
+    this.wish = 0,
   });
   final String pk;
   final double balance;
   final EnvelopePriority priority;
   final double scheduled; // платежи, которые ещё предстоят в этом месяце
-  final double goalMonthly; // ежемесячный взнос на цель
+  // Копилка под редкие платежи (раз в 3/6 месяцев, раз в год): сколько должно
+  // лежать к концу этого месяца, чтобы к сроку набралась вся сумма.
+  final double longRequired;
+  // Цель со сроком: сколько должно лежать к концу этого месяца
+  // (остаток на начало месяца + ежемесячный взнос).
+  final double goalRequired;
   final bool hasGoal; // с целью: остаток в конце месяца не уходит в «Свободные»
+  // Цель без срока: сколько ещё осталось собрать «по возможности»
+  final double wish;
 
   /// Сколько ещё нужно положить (0, если лежащего хватает).
-  double get need => max(0.0, scheduled + goalMonthly - balance);
+  double get need =>
+      max(0.0, scheduled + longRequired + goalRequired - balance);
 }
 
 double _round(double value, int decimals) {
@@ -60,10 +70,13 @@ class PlanResult {
 }
 
 /// Раскладка поступления: по приоритету (высокий → низкий), внутри приоритета
-/// по порядку подгрупп. Что не ушло в потребности, остаётся в «Свободных».
+/// по порядку подгрупп. [share] — какую часть потребности даёт это поступление
+/// (зарплата 2/3, аванс — всё оставшееся). То, что не ушло в потребности,
+/// идёт в цели без срока «по возможности», остальное остаётся в «Свободных».
 PlanResult planDeposit({
   required List<PlanLine> lines,
   required double deposit,
+  double share = 1.0,
   int decimals = 2,
 }) {
   Map<String, double> amounts = {for (PlanLine l in lines) l.pk: 0.0};
@@ -71,16 +84,29 @@ PlanResult planDeposit({
   double shortfall = 0;
   for (EnvelopePriority priority in EnvelopePriority.values) {
     for (PlanLine line in lines.where((l) => l.priority == priority)) {
-      double give = min(line.need, left);
+      double want = line.need * share;
+      double give = min(want, left);
       amounts[line.pk] = amounts[line.pk]! + give;
       left -= give;
-      shortfall += line.need - give;
+      shortfall += want - give;
     }
+  }
+  for (PlanLine line in lines) {
+    if (line.wish <= 0 || left <= 0) continue;
+    double give = min(line.wish, left);
+    amounts[line.pk] = amounts[line.pk]! + give;
+    left -= give;
   }
   return PlanResult(
     amounts: {for (var e in amounts.entries) e.key: _round(e.value, decimals)},
     shortfall: _round(shortfall, decimals),
   );
+}
+
+/// Доля потребности, которую закрывает поступление: зарплата (ближайшее
+/// к 12-му числу) — 2/3, аванс (к 25-му) — всё, что осталось.
+double receiptShare(DateTime date) {
+  return (date.day - 12).abs() <= (date.day - 25).abs() ? 2 / 3 : 1.0;
 }
 
 /// Хватит ли свободных денег, чтобы закрыть нехватку [shortage]?

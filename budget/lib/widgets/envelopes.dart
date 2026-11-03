@@ -340,6 +340,21 @@ class _EnvelopesList extends StatelessWidget {
               ),
             ),
           ),
+        Tappable(
+          color: Colors.transparent,
+          borderRadius: 10,
+          onTap: () => openBottomSheet(
+              context, EnvelopeArchiveSheet(wallet: wallet),
+              popupWithKeyboard: false),
+          child: Padding(
+            padding: const EdgeInsetsDirectional.symmetric(vertical: 8),
+            child: TextFont(
+              text: "Архив подгрупп",
+              fontSize: 14,
+              textColor: getColor(context, "textLight"),
+            ),
+          ),
+        ),
         Divider(),
         Row(
           children: [
@@ -597,6 +612,24 @@ class _EnvelopeEditorState extends State<EnvelopeEditor> {
     popRoute(context);
   }
 
+  Future<void> archiveThis() async {
+    Envelope envelope = widget.envelope!;
+    bool? confirmed = await openPopup<bool>(
+      context,
+      title: "Убрать «${envelope.name}» в архив?",
+      description:
+          "Остаток вернётся в свободные деньги. Неоплаченные платежи останутся в календаре без подгруппы, прошлые траты сохранятся. Из архива подгруппу можно вернуть.",
+      icon: Icons.archive_outlined,
+      onSubmitLabel: "В архив",
+      onSubmit: () => popRoute(context, true),
+      onCancelLabel: "Отмена",
+      onCancel: () => popRoute(context, false),
+    );
+    if (confirmed != true) return;
+    await database.archiveEnvelope(envelope);
+    popRoute(context);
+  }
+
   @override
   Widget build(BuildContext context) {
     return PopupFramework(
@@ -736,6 +769,17 @@ class _EnvelopeEditorState extends State<EnvelopeEditor> {
               if (widget.envelope != null) ...[
                 Expanded(
                   child: Button(
+                    label: "В архив",
+                    expandedLayout: true,
+                    color: Theme.of(context).colorScheme.secondaryContainer,
+                    textColor:
+                        Theme.of(context).colorScheme.onSecondaryContainer,
+                    onTap: archiveThis,
+                  ),
+                ),
+                SizedBox(width: 8),
+                Expanded(
+                  child: Button(
                     label: "Удалить",
                     expandedLayout: true,
                     color: Theme.of(context).colorScheme.errorContainer,
@@ -859,7 +903,7 @@ class EnvelopeTableSheet extends StatefulWidget {
   });
   final TransactionWallet wallet;
   final EnvelopeBalances balances;
-  final Map<String, double> scheduled; // платежи календаря на месяц по подгруппам
+  final Map<String, ScheduledInfo> scheduled; // платежи календаря на месяц по подгруппам
   final double? incomeAmount;
   final String? sourceTransactionPk;
 
@@ -881,7 +925,7 @@ class _EnvelopeTableSheetState extends State<EnvelopeTableSheet> {
   List<PlanLine> get planLines =>
       planLinesOf(widget.balances, widget.scheduled);
 
-  bool get hasPlan => planLines.any((l) => l.need > 0);
+  bool get hasPlan => planLines.any((l) => l.need > 0 || l.wish > 0);
 
   // Деньги, которые раскладываем: пополнение или все свободные
   double get amountToSplit {
@@ -891,9 +935,17 @@ class _EnvelopeTableSheetState extends State<EnvelopeTableSheet> {
 
   String? needTextOf(String envelopePk) {
     PlanLine line = planLines.firstWhere((l) => l.pk == envelopePk);
-    if (line.scheduled <= 0 && line.goalMonthly <= 0) return null;
-    return "Платежи в этом месяце: " +
-        envelopeMoney(context, widget.wallet, line.scheduled) +
+    if (line.scheduled <= 0 &&
+        line.longRequired <= 0 &&
+        line.goalRequired <= 0 &&
+        line.wish <= 0) return null;
+    if (line.need <= 0 && line.wish > 0) {
+      return "Цель без срока, по возможности: осталось " +
+          envelopeMoney(context, widget.wallet, line.wish);
+    }
+    return "Нужно к концу месяца: " +
+        envelopeMoney(context, widget.wallet,
+            line.scheduled + line.longRequired + line.goalRequired) +
         (line.need > 0
             ? " · нужно добавить " +
                 envelopeMoney(context, widget.wallet, line.need)
@@ -905,6 +957,7 @@ class _EnvelopeTableSheetState extends State<EnvelopeTableSheet> {
     PlanResult result = planDeposit(
       lines: planLines,
       deposit: amountToSplit,
+      share: receiptShare(DateTime.now()),
       decimals: decimals,
     );
     setState(() {
@@ -1544,4 +1597,69 @@ Future<String?> pickEnvelope(
   );
   if (result is String) return result;
   return null;
+}
+
+
+// ---------------------------------------------------------------------------
+// Архив подгрупп
+
+class EnvelopeArchiveSheet extends StatefulWidget {
+  const EnvelopeArchiveSheet({required this.wallet, super.key});
+  final TransactionWallet wallet;
+
+  @override
+  State<EnvelopeArchiveSheet> createState() => _EnvelopeArchiveSheetState();
+}
+
+class _EnvelopeArchiveSheetState extends State<EnvelopeArchiveSheet> {
+  Future<List<Envelope>> load() async {
+    return (await database
+            .getEnvelopesIncludingArchived(widget.wallet.walletPk))
+        .where((e) => isEnvelopeArchived(e.envelopePk))
+        .toList();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return PopupFramework(
+      title: "Архив подгрупп",
+      subtitle: widget.wallet.name,
+      child: FutureBuilder<List<Envelope>>(
+        future: load(),
+        builder: (context, snapshot) {
+          List<Envelope> list = snapshot.data ?? [];
+          if (list.isEmpty) {
+            return TextFont(
+              text: "В архиве пусто",
+              fontSize: 14,
+              textColor: getColor(context, "textLight"),
+            );
+          }
+          return Column(
+            children: [
+              for (Envelope envelope in list)
+                Padding(
+                  padding: const EdgeInsetsDirectional.only(bottom: 8),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: TextFont(
+                            text: envelope.name, fontSize: 16, maxLines: 1),
+                      ),
+                      Button(
+                        label: "Вернуть",
+                        onTap: () async {
+                          await database.restoreEnvelope(envelope);
+                          setState(() {});
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+          );
+        },
+      ),
+    );
+  }
 }
