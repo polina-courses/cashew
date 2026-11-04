@@ -7,18 +7,29 @@ import 'package:budget/struct/categoryWalletLinks.dart';
 import 'package:budget/struct/databaseGlobal.dart';
 import 'package:budget/struct/settings.dart';
 
+/// Общий счёт — первый по порядку (на него приходят деньги). Привязка категории
+/// к нему не считается счётом категории.
+String mainWalletPk(List<TransactionWallet> all) {
+  TransactionWallet main = all.first;
+  for (TransactionWallet w in all) {
+    if (w.order < main.order) main = w;
+  }
+  return main.walletPk;
+}
+
 /// Счёт категории: связанный, либо счёт с таким же названием, либо новый
 /// (название = категория, валюта как у основного счёта).
 Future<TransactionWallet> ensureCategoryWallet(
     TransactionCategory category) async {
   List<TransactionWallet> all = await database.getAllWallets();
   String? linked = getCategoryWalletLinks()[category.categoryPk];
+  String main = mainWalletPk(all);
   for (TransactionWallet w in all) {
-    if (w.walletPk == linked) return w;
+    if (w.walletPk == linked && w.walletPk != main) return w;
   }
   String wanted = category.name.trim().toLowerCase();
   for (TransactionWallet w in all) {
-    if (w.name.trim().toLowerCase() == wanted) {
+    if (w.walletPk != main && w.name.trim().toLowerCase() == wanted) {
       await setCategoryWalletLink(category.categoryPk, w.walletPk);
       return w;
     }
@@ -48,7 +59,7 @@ Future<TransactionWallet> ensureCategoryWallet(
 /// Счета категорий (без общего): те, что привязаны к категориям.
 Future<List<TransactionWallet>> getCategoryWallets() async {
   Set<String> pks = getCategoryWalletLinks().values.toSet();
-  return (await database.getAllWallets())
-      .where((w) => pks.contains(w.walletPk))
-      .toList();
+  List<TransactionWallet> all = await database.getAllWallets();
+  String main = mainWalletPk(all);
+  return all.where((w) => pks.contains(w.walletPk) && w.walletPk != main).toList();
 }

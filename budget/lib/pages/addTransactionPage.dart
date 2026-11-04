@@ -305,19 +305,25 @@ class _AddTransactionPageState extends State<AddTransactionPage>
       if (selectedCategory != category) selectedSubCategory = null;
       selectedCategory = category;
     });
-    // Локальная версия: у категории расхода есть счёт по умолчанию — подставляем его
+    // Локальная версия: у категории расхода свой счёт — подставляем его (или создаём)
+    List<TransactionWallet> wallets =
+        Provider.of<AllWallets>(context, listen: false).list;
+    String main = wallets.isEmpty ? "" : mainWalletPk(wallets);
     if (widget.transaction == null &&
-        widget.selectedWallet == null &&
+        (widget.selectedWallet == null ||
+            widget.selectedWallet!.walletPk == main) &&
         walletChosenManually == false &&
         isAddedToLoanObjective == false &&
         category.income == false &&
         category.categoryPk != "0") {
       String? linked = getLinkedWalletPk(category.categoryPk,
           Provider.of<AllWallets>(context, listen: false));
-      if (linked != null && linked != selectedWalletPk) {
-        setSelectedWalletPk(linked, manual: false);
-      } else if (linked == null) {
-        // Счёта у категории ещё нет — создаём (название = категория)
+      if (linked != null && linked != main) {
+        if (linked != selectedWalletPk) {
+          setSelectedWalletPk(linked, manual: false);
+        }
+      } else {
+        // Своего счёта у категории ещё нет — создаём (название = категория)
         ensureCategoryWallet(category).then((wallet) {
           if (!mounted || selectedCategory?.categoryPk != category.categoryPk) {
             return;
@@ -605,6 +611,29 @@ class _AddTransactionPageState extends State<AddTransactionPage>
         await addAssociatedTitles(selectedTitle!, selectedCategory!);
       }
 
+      // Локальная версия: у новой траты категории должен быть свой счёт
+      if (widget.transaction == null &&
+          selectedIncome == false &&
+          isAddedToLoanObjective == false &&
+          walletChosenManually == false &&
+          selectedCategory != null &&
+          selectedCategory!.categoryPk != "0") {
+        List<TransactionWallet> wallets =
+            Provider.of<AllWallets>(context, listen: false).list;
+        String main = wallets.isEmpty ? "" : mainWalletPk(wallets);
+        if (widget.selectedWallet == null ||
+            widget.selectedWallet!.walletPk == main) {
+          TransactionWallet categoryWallet =
+              await ensureCategoryWallet(selectedCategory!);
+          if (categoryWallet.walletPk != selectedWalletPk) {
+            String? keep =
+                selectedEnvelopePk == newEnvelopeKey ? newEnvelopeKey : null;
+            setSelectedWalletPk(categoryWallet.walletPk, manual: false);
+            selectedEnvelopePk = keep;
+          }
+        }
+      }
+
       // Локальная версия: трата со счёта с подгруппами — подгруппа обязательна
       if (needsEnvelope) {
         TransactionWallet? envelopeWallet = getSelectedWallet(listen: false);
@@ -712,7 +741,10 @@ class _AddTransactionPageState extends State<AddTransactionPage>
           isAddedToLoanObjective == false &&
           selectedCategory != null &&
           selectedCategory!.categoryPk != "0" &&
-          getCategoryWalletLinks()[selectedCategory!.categoryPk] == null) {
+          getCategoryWalletLinks()[selectedCategory!.categoryPk] == null &&
+          selectedWalletPk !=
+              mainWalletPk(
+                  Provider.of<AllWallets>(context, listen: false).list)) {
         await setCategoryWalletLink(
             selectedCategory!.categoryPk, selectedWalletPk);
       }
