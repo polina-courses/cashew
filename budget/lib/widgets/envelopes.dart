@@ -254,12 +254,25 @@ String? envelopeNeedLabel(
     return "Цель без срока, по возможности: осталось " +
         envelopeMoney(context, wallet, line.wish);
   }
-  return "Нужно к концу месяца: " +
+  String text = "";
+  if (line.accrualMonthly > 0 && line.accrualDue != null) {
+    text = "Копим к " +
+        envelopeDate(line.accrualDue!) +
+        ": по " +
+        envelopeMoney(context, wallet, line.accrualMonthly) +
+        " в месяц — с ЗП " +
+        envelopeMoney(context, wallet, line.accrualMonthly * 2 / 3) +
+        ", с аванса " +
+        envelopeMoney(context, wallet, line.accrualMonthly / 3) +
+        "\n";
+  }
+  text += "К концу месяца должно лежать " +
       envelopeMoney(context, wallet,
           line.scheduled + line.longRequired + line.goalRequired) +
       (line.need > 0
           ? " · добавить " + envelopeMoney(context, wallet, line.need)
           : " · пополнение не нужно");
+  return text;
 }
 
 class _CategoryHeader extends StatelessWidget {
@@ -405,7 +418,7 @@ class _EnvelopesList extends StatelessWidget {
                             text: envelopeNeedLabel(
                                 context, wallet, lineOf(envelope))!,
                             fontSize: 12,
-                            maxLines: 2,
+                            maxLines: 5,
                             textColor: getColor(context, "textLight"),
                           ),
                         if ((envelope.note ?? "").trim().isNotEmpty)
@@ -1308,7 +1321,7 @@ class _EnvelopeTableSheetState extends State<EnvelopeTableSheet> {
                           TextFont(
                             text: needTextOf(envelope.envelopePk)!,
                             fontSize: 12,
-                            maxLines: 2,
+                            maxLines: 5,
                             textColor: getColor(context, "textLight"),
                           ),
                         if (envelopeGoalProgressText(

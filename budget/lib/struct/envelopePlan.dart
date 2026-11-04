@@ -38,6 +38,8 @@ class PlanLine {
     this.goalRequired = 0,
     this.hasGoal = false,
     this.wish = 0,
+    this.accrualMonthly = 0,
+    this.accrualDue,
   });
   final String pk;
   final double balance;
@@ -52,6 +54,9 @@ class PlanLine {
   final bool hasGoal; // с целью: остаток в конце месяца не уходит в «Свободные»
   // Цель без срока: сколько ещё осталось собрать «по возможности»
   final double wish;
+  // Копим к будущему платежу: сколько в месяц и к какому сроку (ближайшему)
+  final double accrualMonthly;
+  final DateTime? accrualDue;
 
   /// Сколько ещё нужно положить (0, если лежащего хватает).
   double get need =>

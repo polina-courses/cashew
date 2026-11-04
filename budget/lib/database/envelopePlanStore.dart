@@ -56,7 +56,9 @@ DateTime? _occurrenceDate(Transaction base, int n) {
 
 class ScheduledInfo {
   double scheduled = 0; // платежи, которые предстоят в этом месяце
-  double longRequired = 0; // копилка под редкие платежи (раз в 3/6/12 месяцев)
+  double longRequired = 0; // копилка под редкие и будущие платежи
+  double accrualMonthly = 0; // сколько откладывать в месяц на них
+  DateTime? accrualDue; // ближайший срок
 }
 
 /// Длительность периода повтора в месяцах (для недель и дней — меньше месяца).
@@ -93,14 +95,39 @@ Future<Map<String, ScheduledInfo>> getScheduledForMonth(
                 t.type.equals(TransactionSpecialType.subscription.index))))
       .get();
   Map<String, ScheduledInfo> result = {};
+  // Месяц, когда платёж впервые попал в расчёт (чтобы делить сумму по месяцам)
+  Map<String, int> starts = {
+    for (MapEntry<String, dynamic> e in _mapSetting("scheduleStart").entries)
+      if (e.value is num) e.key: (e.value as num).toInt()
+  };
+  bool startsChanged = false;
   ScheduledInfo infoOf(Transaction t) =>
       result.putIfAbsent(t.envelopeFk!, () => ScheduledInfo());
 
   for (Transaction t in items) {
     double amount = t.amount.abs();
-    if (t.dateCreated.isBefore(monthEnd)) infoOf(t).scheduled += amount;
     bool repeats = t.type == TransactionSpecialType.repetitive ||
         t.type == TransactionSpecialType.subscription;
+    if (t.dateCreated.isBefore(monthEnd)) infoOf(t).scheduled += amount;
+    if (!repeats && !t.dateCreated.isBefore(monthEnd)) {
+      // Разовый платёж в будущем месяце: копим равными долями по месяцам
+      int nowIdx = today.year * 12 + today.month;
+      int dueIdx = t.dateCreated.year * 12 + t.dateCreated.month;
+      int firstIdx = starts[t.transactionPk] ?? nowIdx;
+      if (starts[t.transactionPk] == null) {
+        starts[t.transactionPk] = nowIdx;
+        startsChanged = true;
+      }
+      int parts = max(1, dueIdx - firstIdx);
+      int k = nowIdx - firstIdx + 1;
+      ScheduledInfo info = infoOf(t);
+      info.longRequired += amount * min(1.0, k / parts);
+      info.accrualMonthly += amount / parts;
+      if (info.accrualDue == null || t.dateCreated.isBefore(info.accrualDue!)) {
+        info.accrualDue = t.dateCreated;
+      }
+      continue;
+    }
     if (!repeats) continue;
     double periodMonths = _periodMonths(t);
     if (periodMonths > 1 &&
@@ -121,6 +148,9 @@ Future<Map<String, ScheduledInfo>> getScheduledForMonth(
       if (date.isBefore(todayStart)) continue;
       infoOf(t).scheduled += amount;
     }
+  }
+  if (startsChanged) {
+    await updateSettings("scheduleStart", starts, updateGlobalState: false);
   }
   return result;
 }
@@ -159,6 +189,8 @@ List<PlanLine> planLinesOf(
         priority: getEnvelopePriority(envelope.envelopePk),
         scheduled: scheduled[envelope.envelopePk]?.scheduled ?? 0,
         longRequired: scheduled[envelope.envelopePk]?.longRequired ?? 0,
+        accrualMonthly: scheduled[envelope.envelopePk]?.accrualMonthly ?? 0,
+        accrualDue: scheduled[envelope.envelopePk]?.accrualDue,
         goalRequired:
             goalRequiredOf(envelope, balances.balanceOf(envelope.envelopePk)),
         hasGoal: (envelope.targetAmount ?? 0) > 0,
