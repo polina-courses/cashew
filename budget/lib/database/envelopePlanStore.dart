@@ -109,8 +109,12 @@ Future<Map<String, ScheduledInfo>> getScheduledForMonth(
     bool repeats = t.type == TransactionSpecialType.repetitive ||
         t.type == TransactionSpecialType.subscription;
     if (t.dateCreated.isBefore(monthEnd)) infoOf(t).scheduled += amount;
-    if (!repeats && !t.dateCreated.isBefore(monthEnd)) {
-      // Разовый платёж в будущем месяце: копим равными долями по месяцам
+    bool rare = repeats &&
+        _periodMonths(t) > 1 &&
+        (t.endDate == null || !t.endDate!.isBefore(t.dateCreated));
+    if ((!repeats || rare) && !t.dateCreated.isBefore(monthEnd)) {
+      // Разовый или редкий платёж (раз в 3/6/12 месяцев) в будущем месяце:
+      // копим равными долями по месяцам с того месяца, когда он появился
       int nowIdx = today.year * 12 + today.month;
       int dueIdx = t.dateCreated.year * 12 + t.dateCreated.month;
       int firstIdx = starts[t.transactionPk] ?? nowIdx;
@@ -129,17 +133,6 @@ Future<Map<String, ScheduledInfo>> getScheduledForMonth(
       continue;
     }
     if (!repeats) continue;
-    double periodMonths = _periodMonths(t);
-    if (periodMonths > 1 &&
-        !t.dateCreated.isBefore(monthEnd) &&
-        (t.endDate == null || !t.endDate!.isBefore(t.dateCreated))) {
-      // Редкий платёж: копим заранее, чтобы к сроку набралась вся сумма
-      int monthsToDue = (t.dateCreated.year - today.year) * 12 +
-          t.dateCreated.month -
-          today.month;
-      double required = amount * (1 - monthsToDue / periodMonths);
-      if (required > 0) infoOf(t).longRequired += required;
-    }
     if (t.createdAnotherFutureTransaction == true) continue;
     for (int n = 1; n <= 400; n++) {
       DateTime? date = _occurrenceDate(t, n);
