@@ -36,14 +36,6 @@ Future<List<_AccountNeed>> _loadNeeds() async {
   return result;
 }
 
-/// Как делить потребность между ближайшими поступлениями.
-/// До 12-го: ЗП 2/3, аванс 1/3. С 13-го по 25-е: ЗП уже была, аванс — всё.
-/// После 25-го: всё нужно добавить сейчас.
-(double, double) splitNeed(double need, DateTime now) {
-  if (now.day <= 12) return (need * 2 / 3, need / 3);
-  return (0.0, need);
-}
-
 class HomePageTopUpSummary extends StatelessWidget {
   const HomePageTopUpSummary({super.key});
 
@@ -109,13 +101,13 @@ class HomePageTopUpSummary extends StatelessWidget {
                                 text: n.need <= 0
                                     ? "хватает"
                                     : beforeSalary
-                                        ? "с ЗП " +
+                                        ? "ЗП " +
                                             money(splitNeed(n.need, now).$1,
                                                 n.wallet) +
-                                            " · с аванса " +
+                                            " · Ав " +
                                             money(splitNeed(n.need, now).$2,
                                                 n.wallet)
-                                        : "с аванса " + money(n.need, n.wallet),
+                                        : "Ав " + money(n.need, n.wallet),
                                 fontSize: 13,
                                 textColor: n.need <= 0
                                     ? getColor(context, "textLight")
@@ -137,13 +129,13 @@ class HomePageTopUpSummary extends StatelessWidget {
                             text: total <= 0
                                 ? "ничего не нужно"
                                 : beforeSalary
-                                    ? "с ЗП " +
+                                    ? "ЗП " +
                                         money(totalSalary, first) +
-                                        " · с аванса " +
+                                        " · Ав " +
                                         money(totalAdvance, first) +
-                                        " · итого " +
+                                        " = " +
                                         money(total, first)
-                                    : "с аванса " + money(total, first),
+                                    : "Ав " + money(total, first),
                             fontSize: 13,
                             fontWeight: FontWeight.bold,
                             maxLines: 2,

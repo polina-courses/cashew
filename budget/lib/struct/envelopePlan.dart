@@ -140,3 +140,10 @@ List<PlanMove> sweepMonthEnd({
         PlanMove(line.pk, null, _round(line.balance, decimals)),
   ];
 }
+
+/// Как делить потребность между ближайшими поступлениями: (с ЗП, с аванса).
+/// До 12-го: ЗП 2/3, аванс 1/3. С 13-го: ЗП уже была, аванс — всё оставшееся.
+(double, double) splitNeed(double need, DateTime now) {
+  if (now.day <= 12) return (need * 2 / 3, need / 3);
+  return (0.0, need);
+}
