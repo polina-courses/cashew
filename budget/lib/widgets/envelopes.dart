@@ -258,7 +258,7 @@ String? envelopeNeedLabel(
   if (line.accrualMonthly > 0 && line.accrualDue != null) {
     text = "Копим к " +
         envelopeDate(line.accrualDue!) +
-        ": по " +
+        ": осталось по " +
         envelopeMoney(context, wallet, line.accrualMonthly) +
         " в месяц — с ЗП " +
         envelopeMoney(context, wallet, line.accrualMonthly * 2 / 3) +

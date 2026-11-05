@@ -57,7 +57,8 @@ DateTime? _occurrenceDate(Transaction base, int n) {
 class ScheduledInfo {
   double scheduled = 0; // платежи, которые предстоят в этом месяце
   double longRequired = 0; // копилка под редкие и будущие платежи
-  double accrualMonthly = 0; // сколько откладывать в месяц на них
+  // платежи, под которые копим: (сумма, сколько месяцев осталось копить, включая этот)
+  List<(double, int)> accrualItems = [];
   DateTime? accrualDue; // ближайший срок
 }
 
@@ -126,7 +127,7 @@ Future<Map<String, ScheduledInfo>> getScheduledForMonth(
       int k = nowIdx - firstIdx + 1;
       ScheduledInfo info = infoOf(t);
       info.longRequired += amount * min(1.0, k / parts);
-      info.accrualMonthly += amount / parts;
+      info.accrualItems.add((amount, max(1, parts - k + 1)));
       if (info.accrualDue == null || t.dateCreated.isBefore(info.accrualDue!)) {
         info.accrualDue = t.dateCreated;
       }
@@ -172,6 +173,20 @@ double goalRequiredOf(Envelope envelope, double balance) {
   return min(target, base + (target - base) / months);
 }
 
+/// Сколько откладывать в месяц на редкие платежи с учётом уже лежащих денег.
+double _accrualMonthly(ScheduledInfo? info, double balance) {
+  if (info == null || info.accrualItems.isEmpty) return 0;
+  double total = info.accrualItems.fold(0.0, (sum, i) => sum + i.$1);
+  // деньги под ближайшие платежи этого месяца в копилку не входят
+  double saved = max(0.0, balance - info.scheduled);
+  double left = max(0.0, 1 - saved / total);
+  double monthly = 0;
+  for ((double, int) item in info.accrualItems) {
+    monthly += item.$1 * left / item.$2;
+  }
+  return monthly;
+}
+
 List<PlanLine> planLinesOf(
     EnvelopeBalances balances, Map<String, ScheduledInfo> scheduled) {
   return [
@@ -182,7 +197,9 @@ List<PlanLine> planLinesOf(
         priority: getEnvelopePriority(envelope.envelopePk),
         scheduled: scheduled[envelope.envelopePk]?.scheduled ?? 0,
         longRequired: scheduled[envelope.envelopePk]?.longRequired ?? 0,
-        accrualMonthly: scheduled[envelope.envelopePk]?.accrualMonthly ?? 0,
+        accrualMonthly: _accrualMonthly(
+            scheduled[envelope.envelopePk],
+            balances.balanceOf(envelope.envelopePk)),
         accrualDue: scheduled[envelope.envelopePk]?.accrualDue,
         goalRequired:
             goalRequiredOf(envelope, balances.balanceOf(envelope.envelopePk)),
