@@ -115,4 +115,27 @@ void main() {
     expect(moves.single.to, null);
     expect(moves.single.amount, 250);
   });
+
+  group('репетиторы: 8 уроков по 1000 в месяце', () {
+    test('1: в начале месяца лежит всё, через неделю списали 2000 — пополнение не нужно',
+        () {
+      expect(line("tutors", balance: 8000, scheduled: 8000).need, 0);
+      // после двух оплаченных уроков: лежит 6000, впереди ещё 6000
+      expect(line("tutors", balance: 6000, scheduled: 6000).need, 0);
+    });
+
+    test('2: в начале месяца лежит не всё — нужна доплата', () {
+      PlanLine l = line("tutors", balance: 5000, scheduled: 8000);
+      expect(l.need, 3000);
+    });
+
+    test('3: середина месяца, потрачено 4000, лежит 3000, впереди 4000 — с аванса 1000',
+        () {
+      PlanLine l = line("tutors", balance: 3000, scheduled: 4000);
+      expect(l.need, 1000);
+      var split = splitNeed(l.need, DateTime(2026, 11, 15));
+      expect(split.$1, 0);
+      expect(split.$2, 1000);
+    });
+  });
 }

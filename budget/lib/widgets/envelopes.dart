@@ -373,8 +373,12 @@ class EnvelopeNeedLines extends StatelessWidget {
               padding: const EdgeInsetsDirectional.only(top: 4),
               child: Row(
                 children: [
-                  if (split.$1 > 0) _Chip("ЗП", money(split.$1)),
-                  _Chip("Ав", money(split.$2)),
+                  if (DateTime.now().day > 25)
+                    _Chip("Сейчас", money(line.need))
+                  else ...[
+                    if (split.$1 > 0) _Chip("ЗП", money(split.$1)),
+                    _Chip("Ав", money(split.$2)),
+                  ],
                   if (line.accrualDue != null)
                     TextFont(
                       text: "до " + envelopeDate(line.accrualDue!),
