@@ -7,6 +7,7 @@ import 'package:budget/pages/homePage/homePageLineGraph.dart';
 import 'package:budget/pages/homePage/homePageNetWorth.dart';
 import 'package:budget/pages/homePage/homePageObjectives.dart';
 import 'package:budget/pages/homePage/homePagePieChart.dart';
+import 'package:budget/pages/homePage/homePageTopUpSummary.dart';
 import 'package:budget/pages/homePage/homePageWalletList.dart';
 import 'package:budget/pages/homePage/homePageWalletSwitcher.dart';
 import 'package:budget/pages/homePage/homeTransactions.dart';
@@ -327,6 +328,8 @@ class HomePageState extends State<HomePage> with TickerProviderStateMixin {
                             ),
                           )
                         : SizedBox(height: 5),
+                    // Локальная версия: сводка «сколько отложить с ЗП и аванса»
+                    HomePageTopUpSummary(),
                     // Not full screen
                     if (enableDoubleColumn(context) != true) ...[
                       // Локальная версия: карточка «Оцените приложение» убрана
