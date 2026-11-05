@@ -5789,7 +5789,7 @@ class FinanceDatabase extends _$FinanceDatabase {
         ..where(
           (objectiveType == ObjectiveType.loan
                   ? transactions.objectiveLoanFk.equals(objectivePk)
-                  : transactions.objectiveLoanFk.equals(objectivePk)) &
+                  : transactions.objectiveFk.equals(objectivePk)) &
               transactions.walletFk.equals(wallet.walletPk),
         );
 
@@ -6827,12 +6827,21 @@ class FinanceDatabase extends _$FinanceDatabase {
   }) {
     // we have to convert currencies to account for all wallets
     List<Stream<TotalWithCount?>> mergedStreams = [];
+    // Goal contributions leave the specific account, but the money still
+    // exists (a separate savings pot), so the total over several accounts
+    // does not lose it. A single account's balance does.
+    final bool keepGoalSavingsInTotal = isIncome == null &&
+        useAbsoluteSum == false &&
+        (searchFilters?.walletPks.length ?? 0) != 1;
     for (TransactionWallet wallet in allWallets.list) {
+      final Expression<bool> countsInSum = keepGoalSavingsInTotal
+          ? transactions.paid.equals(true) &
+              (transactions.objectiveFk.isNull() |
+                  transactions.income.equals(true))
+          : transactions.paid.equals(true);
       final totalAmt = useAbsoluteSum
-          ? transactions.amount
-              .abs()
-              .sum(filter: transactions.paid.equals(true))
-          : transactions.amount.sum(filter: transactions.paid.equals(true));
+          ? transactions.amount.abs().sum(filter: countsInSum)
+          : transactions.amount.sum(filter: countsInSum);
       final totalCount = transactions.transactionPk.count();
       final query = selectOnly(transactions)
         ..addColumns([totalAmt, totalCount])
