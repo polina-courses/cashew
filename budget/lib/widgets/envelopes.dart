@@ -431,6 +431,13 @@ class _CategoryHeader extends StatelessWidget {
                     ),
                   ),
           ),
+          if (need > 0)
+            TextFont(
+              text: "нужно " + envelopeMoney(context, wallet, need),
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+              textColor: getColor(context, "expenseAmount"),
+            ),
         ],
       ),
     );
