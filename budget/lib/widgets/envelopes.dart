@@ -354,7 +354,14 @@ class EnvelopeNeedLines extends StatelessWidget {
                 ),
               ),
               if (line.need > 0) ...[
-                Icon(Icons.arrow_forward_rounded, size: 14, color: light),
+                SizedBox(width: 8),
+                Text(
+                  "пополнить на ",
+                  style: TextStyle(
+                      fontSize: 13,
+                      fontStyle: FontStyle.italic,
+                      color: light.withOpacity(0.7)),
+                ),
                 TextFont(
                   text: money(line.need),
                   fontSize: 13,
@@ -424,13 +431,6 @@ class _CategoryHeader extends StatelessWidget {
                     ),
                   ),
           ),
-          if (need > 0)
-            TextFont(
-              text: "нужно " + envelopeMoney(context, wallet, need),
-              fontSize: 12,
-              fontWeight: FontWeight.bold,
-              textColor: getColor(context, "expenseAmount"),
-            ),
         ],
       ),
     );
