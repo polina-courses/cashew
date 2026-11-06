@@ -97,7 +97,9 @@ class HomePageTopUpSummary extends StatelessWidget {
                                     fontSize: 14,
                                     maxLines: 1),
                               ),
-                              TextFont(
+                              SizedBox(width: 8),
+                              Flexible(
+                                child: TextFont(
                                 text: n.need <= 0
                                     ? "хватает"
                                     : beforeSalary
@@ -112,6 +114,9 @@ class HomePageTopUpSummary extends StatelessWidget {
                                 textColor: n.need <= 0
                                     ? getColor(context, "textLight")
                                     : null,
+                                maxLines: 2,
+                                textAlign: TextAlign.end,
+                              ),
                               ),
                             ],
                           ),
@@ -125,24 +130,38 @@ class HomePageTopUpSummary extends StatelessWidget {
                                 fontSize: 14,
                                 fontWeight: FontWeight.bold),
                           ),
-                          TextFont(
-                            text: total <= 0
-                                ? "ничего не нужно"
-                                : beforeSalary
-                                    ? "ЗП " +
-                                        money(totalSalary, first) +
-                                        " · Ав " +
-                                        money(totalAdvance, first) +
-                                        " = " +
-                                        money(total, first)
-                                    : "Ав " + money(total, first),
-                            fontSize: 13,
-                            fontWeight: FontWeight.bold,
-                            maxLines: 2,
-                            textAlign: TextAlign.end,
+                          Flexible(
+                            child: TextFont(
+                              text: total <= 0
+                                  ? "ничего не нужно"
+                                  : money(total, first),
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                              maxLines: 2,
+                              textAlign: TextAlign.end,
+                            ),
                           ),
                         ],
                       ),
+                      if (total > 0)
+                        Padding(
+                          padding: const EdgeInsetsDirectional.only(top: 2),
+                          child: Align(
+                            alignment: AlignmentDirectional.centerEnd,
+                            child: TextFont(
+                              text: beforeSalary
+                                  ? "ЗП " +
+                                      money(totalSalary, first) +
+                                      " · Ав " +
+                                      money(totalAdvance, first)
+                                  : "Ав " + money(total, first),
+                              fontSize: 13,
+                              maxLines: 2,
+                              textAlign: TextAlign.end,
+                              textColor: getColor(context, "textLight"),
+                            ),
+                          ),
+                        ),
                     ],
                   ),
                 ),
