@@ -25,6 +25,7 @@ import 'package:budget/pages/onBoardingPage.dart';
 import 'package:budget/pages/premiumPage.dart';
 import 'package:budget/pages/settingsPage.dart';
 import 'package:budget/pages/subscriptionsPage.dart';
+import 'package:budget/database/envelopePlanStore.dart';
 import 'package:budget/pages/utilitiesPage.dart';
 import 'package:budget/pages/transactionsListPage.dart';
 import 'package:budget/pages/upcomingOverdueTransactionsPage.dart';
@@ -412,6 +413,8 @@ class PageNavigationFrameworkState extends State<PageNavigationFramework> {
     // Functions to run after entire UI loaded
     Future.delayed(Duration.zero, () async {
       sidebarStateKey.currentState?.setSelectedIndex(currentPage);
+      // Локальная версия: все счета только в рублях
+      await database.forceAllWalletsRuble();
 
       SystemChrome.setSystemUIOverlayStyle(getSystemUiOverlayStyle(
           Theme.of(context).extension<AppColors>(),

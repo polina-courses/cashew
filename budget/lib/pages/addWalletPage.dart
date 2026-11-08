@@ -135,7 +135,7 @@ class _AddWalletPageState extends State<AddWalletPage> {
       setState(() {
         //Set to false because we can't save until we made some changes
         canAddWallet = false;
-        currencies = currenciesJSON;
+        currencies = {"rub": currenciesJSON["rub"]};
       });
     });
   }
@@ -199,6 +199,7 @@ class _AddWalletPageState extends State<AddWalletPage> {
     } else {
       Map<String, dynamic> outCurrencies = {};
       for (String key in currenciesJSON.keys) {
+        if (key != "rub") continue; // Локальная версия: только рубль
         dynamic currency = currenciesJSON[key];
         if ((currency["CountryName"] != null &&
                 currency["CountryName"]

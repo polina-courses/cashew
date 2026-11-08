@@ -43,7 +43,7 @@ TransactionWallet defaultWallet() {
     name: "default-account-name".tr(),
     dateCreated: DateTime.now(),
     order: 0,
-    currency: getDevicesDefaultCurrencyCode(),
+    currency: "rub", // Локальная версия: только рубль
     dateTimeModified: null,
     decimals: 2,
     homePageWidgetDisplay: defaultWalletHomePageWidgetDisplay,

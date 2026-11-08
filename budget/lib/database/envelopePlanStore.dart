@@ -237,6 +237,13 @@ extension EnvelopePlanQueries on FinanceDatabase {
     }
   }
 
+  /// Локальная версия: все счета только в рублях.
+  Future<void> forceAllWalletsRuble() async {
+    await (update(wallets)
+          ..where((w) => w.currency.isNull() | w.currency.equals("rub").not()))
+        .write(WalletsCompanion(currency: Value("rub")));
+  }
+
   /// Баланс счёта уменьшили (например, обнулили), а в подгруппах деньги
   /// остались: снимаем излишек с подгрупп, чтобы сумма сошлась со счётом.
   Future<void> shrinkEnvelopesToWallet(String walletPk) async {
