@@ -220,10 +220,9 @@ Future openAddTransactionTypePicker(
       AddTransactionPage(
         selectedBudget: selectedBudget,
         selectedIncome: isIncome,
-        skipCategoryStepForIncome: isIncome,
         startAsUpcoming: !isIncome,
-        // Расход заводится одной формой: сумма, категория, название, комментарий
-        startInitialAddTransactionSequence: isIncome,
+        // Расход и доход заводятся одной формой, без цепочки окон
+        startInitialAddTransactionSequence: false,
         routesToPopAfterDelete: routesToPopAfterDelete,
       ),
     );

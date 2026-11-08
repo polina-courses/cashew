@@ -190,6 +190,22 @@ class _AddTransactionPageState extends State<AddTransactionPage>
         t.type != TransactionSpecialType.debt;
   }
 
+  // Локальная версия: форма дохода на одном экране (создание и обычный доход)
+  bool get usesIncomeLayout {
+    if (selectedIncome != true || isAddedToLoanObjective) return false;
+    if (widget.transaction == null) {
+      return isSingleFormExpense && widget.selectedIncome == true;
+    }
+    Transaction t = widget.transaction!;
+    return t.income == true &&
+        t.categoryFk != "0" &&
+        t.objectiveLoanFk == null &&
+        t.type != TransactionSpecialType.credit &&
+        t.type != TransactionSpecialType.debt;
+  }
+
+  bool get usesSingleForm => usesExpenseLayout || usesIncomeLayout;
+
   late bool isAddedToLoanObjective =
       widget.selectedObjective?.type == ObjectiveType.loan ||
           widget.transaction?.objectiveLoanFk != null;
@@ -268,6 +284,8 @@ class _AddTransactionPageState extends State<AddTransactionPage>
   @override
   void dispose() {
     envelopesSubscription?.cancel();
+    _amountFocus.dispose();
+    _amountController?.dispose();
     super.dispose();
   }
 
@@ -1059,6 +1077,9 @@ class _AddTransactionPageState extends State<AddTransactionPage>
 
   late TextEditingController _titleInputController;
   late TextEditingController _noteInputController;
+  // Локальная версия: сумма вводится прямо в форме
+  final FocusNode _amountFocus = FocusNode();
+  TextEditingController? _amountController;
 
   @override
   void initState() {
@@ -1577,6 +1598,127 @@ class _AddTransactionPageState extends State<AddTransactionPage>
 
   // Локальная версия: форма нового расхода в одном порядке:
   // название → категория → счёт и подгруппа → сумма → дополнительно → сохранить
+  String _amountFieldText(double v) =>
+      v == v.roundToDouble() ? v.toStringAsFixed(0) : v.toString();
+
+  Widget buildAmountField(BuildContext context) {
+    TextEditingController controller =
+        _amountController ??= TextEditingController(
+            text: selectedAmount == null || selectedAmount == 0
+                ? ""
+                : _amountFieldText(selectedAmount!));
+    // сумма могла измениться не из поля (например, подстановка по названию)
+    if (!_amountFocus.hasFocus) {
+      double? typed = getAmountFromString(controller.text);
+      if ((selectedAmount ?? 0) != (typed ?? 0)) {
+        controller.text =
+            selectedAmount == null ? "" : _amountFieldText(selectedAmount!);
+      }
+    }
+    return Padding(
+      padding: const EdgeInsetsDirectional.symmetric(horizontal: 18),
+      child: TextInput(
+        labelText: "Сумма",
+        controller: controller,
+        focusNode: _amountFocus,
+        autoFocus: widget.transaction == null,
+        numbersOnly: true,
+        keyboardType: TextInputType.numberWithOptions(decimal: true),
+        suffix: " ₽",
+        fontSize: 24,
+        fontWeight: FontWeight.bold,
+        padding: EdgeInsetsDirectional.zero,
+        onChanged: (text) {
+          double? v = getAmountFromString(text);
+          if (text.trim().isEmpty) {
+            setState(() {
+              selectedAmount = null;
+              selectedAmountCalculation = null;
+            });
+          } else if (v != null) {
+            setSelectedAmount(v.abs(), text);
+          }
+        },
+      ),
+    );
+  }
+
+  List<Widget> buildSingleFormIncomeWidgets(BuildContext context) {
+    AllWallets allWallets = Provider.of<AllWallets>(context);
+    Color hintColor = getColor(context, "textLight");
+    Widget sectionTitle(String text) => Padding(
+          padding: const EdgeInsetsDirectional.fromSTEB(22, 20, 22, 8),
+          child: TextFont(
+            text: text,
+            fontSize: 14,
+            fontWeight: FontWeight.bold,
+            textColor: hintColor,
+          ),
+        );
+    return [
+      sectionTitle("1. Сумма"),
+      buildAmountField(context),
+      sectionTitle("2. Название (необязательно)"),
+      TitleInput(
+        clearWhenUnfocused: true,
+        tryToCompleteSearch: true,
+        setSelectedTitle: (title) {
+          setSelectedTitle(title, setInput: false);
+        },
+        titleInputController: _titleInputController,
+        setSelectedCategory: setSelectedCategory,
+        setSelectedSubCategory: setSelectedSubCategory,
+      ),
+      if (allWallets.list.length > 1) ...[
+        sectionTitle("3. Счёт"),
+        SelectChips(
+          allowMultipleSelected: false,
+          items: allWallets.list,
+          getSelected: (TransactionWallet w) =>
+              getSelectedWallet(listen: false)?.walletPk == w.walletPk,
+          onSelected: (TransactionWallet w) {
+            setSelectedWalletPk(w.walletPk);
+          },
+          getLabel: (TransactionWallet w) =>
+              getWalletStringName(allWallets, w),
+        ),
+      ],
+      sectionTitle("Дополнительно"),
+      Padding(
+        padding: const EdgeInsetsDirectional.symmetric(horizontal: 10),
+        child: DateButton(
+          internalPadding: EdgeInsetsDirectional.only(
+              start: 12, bottom: 6, top: 6, end: 8),
+          key: ValueKey(selectedDate.toString()),
+          initialSelectedDate: selectedDate,
+          initialSelectedTime:
+              TimeOfDay(hour: selectedDate.hour, minute: selectedDate.minute),
+          setSelectedDate: (date) {
+            selectedDate = date;
+          },
+          setSelectedTime: (time) {
+            selectedDate =
+                selectedDate.copyWith(hour: time.hour, minute: time.minute);
+          },
+        ),
+      ),
+      SizedBox(height: 10),
+      Padding(
+        padding: const EdgeInsetsDirectional.symmetric(horizontal: 22),
+        child: TransactionNotesTextInput(
+          noteInputController: _noteInputController,
+          setNotesInputFocused: (isFocused) {
+            setState(() {
+              notesInputFocused = isFocused;
+            });
+          },
+          setSelectedNoteController: setSelectedNoteController,
+        ),
+      ),
+      SizedBox(height: 120),
+    ];
+  }
+
   List<Widget> buildSingleFormExpenseWidgets(BuildContext context) {
     AllWallets allWallets = Provider.of<AllWallets>(context);
     TransactionWallet? wallet = getSelectedWallet(listen: true);
@@ -1597,50 +1739,10 @@ class _AddTransactionPageState extends State<AddTransactionPage>
           child: TextFont(text: text, fontSize: 14, textColor: hintColor),
         );
 
-    Widget amountCard = Padding(
-      padding: const EdgeInsetsDirectional.symmetric(horizontal: 18),
-      child: Tappable(
-        color: Theme.of(context).colorScheme.secondaryContainer.withOpacity(0.4),
-        borderRadius: 15,
-        onTap: () => selectAmountPopup(),
-        child: Padding(
-          padding: const EdgeInsetsDirectional.symmetric(
-              horizontal: 18, vertical: 16),
-          child: Row(
-            children: [
-              Expanded(
-                child: TextFont(
-                  text: selectedAmount == null
-                      ? "Введите сумму"
-                      : convertToMoney(
-                          allWallets,
-                          selectedAmount!,
-                          currencyKey: wallet?.currency,
-                          decimals: wallet?.decimals,
-                        ),
-                  fontSize: selectedAmount == null ? 18 : 28,
-                  fontWeight: FontWeight.bold,
-                  textColor: selectedAmount == null
-                      ? hintColor
-                      : getColor(context, "black"),
-                  maxLines: 1,
-                  autoSizeText: true,
-                ),
-              ),
-              Icon(
-                appStateSettings["outlinedIcons"]
-                    ? Icons.edit_outlined
-                    : Icons.edit_rounded,
-                color: hintColor,
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-
     return [
-      sectionTitle("1. Название (необязательно)"),
+      sectionTitle("1. Сумма"),
+      buildAmountField(context),
+      sectionTitle("2. Название (необязательно)"),
       TitleInput(
         clearWhenUnfocused: true,
         tryToCompleteSearch: true,
@@ -1651,7 +1753,7 @@ class _AddTransactionPageState extends State<AddTransactionPage>
         setSelectedCategory: setSelectedCategory,
         setSelectedSubCategory: setSelectedSubCategory,
       ),
-      sectionTitle("2. Категория расхода"),
+      sectionTitle("3. Категория расхода"),
       Padding(
         padding: const EdgeInsetsDirectional.symmetric(horizontal: 18),
         child: SelectCategory(
@@ -1673,7 +1775,7 @@ class _AddTransactionPageState extends State<AddTransactionPage>
           selectedSubCategoryPk: selectedSubCategory?.categoryPk,
           padding: const EdgeInsetsDirectional.only(top: 6),
         ),
-      sectionTitle("3. Счёт и подгруппа"),
+      sectionTitle("4. Счёт и подгруппа"),
       if (selectedCategory == null)
         hint("Сначала выберите категорию")
       else ...[
@@ -1705,8 +1807,6 @@ class _AddTransactionPageState extends State<AddTransactionPage>
         if (allWallets.list.length <= 1 && !needsEnvelope)
           hint("Единственный счёт: ${wallet?.name ?? ""}"),
       ],
-      sectionTitle("4. Сумма"),
-      amountCard,
       sectionTitle("5. Дополнительно"),
       SelectChips(
         allowMultipleSelected: false,
@@ -2614,12 +2714,16 @@ class _AddTransactionPageState extends State<AddTransactionPage>
                 ? "add-record".tr()
                 : usesExpenseLayout
                     ? "Новый расход"
-                    : "add-transaction".tr()
+                    : usesIncomeLayout
+                        ? "Новый доход"
+                        : "add-transaction".tr()
             : isAddedToLoanObjective
                 ? "edit-record".tr()
                 : usesExpenseLayout
                     ? "Редактирование расхода"
-                    : "edit-transaction".tr(),
+                    : usesIncomeLayout
+                        ? "Редактирование дохода"
+                        : "edit-transaction".tr(),
         dragDownToDismiss: true,
         onBackButton: () async {
           if (widget.transaction != null) {
@@ -2711,7 +2815,11 @@ class _AddTransactionPageState extends State<AddTransactionPage>
                               hasBottomExtraSafeArea: true,
                               label: "enter-amount".tr(),
                               onTap: () {
-                                selectAmountPopup();
+                                if (usesSingleForm) {
+                                  _amountFocus.requestFocus();
+                                } else {
+                                  selectAmountPopup();
+                                }
                               },
                             )
                           : Button(
@@ -2775,6 +2883,8 @@ class _AddTransactionPageState extends State<AddTransactionPage>
         ),
         listWidgets: usesExpenseLayout
             ? buildSingleFormExpenseWidgets(context)
+            : usesIncomeLayout
+            ? buildSingleFormIncomeWidgets(context)
             : [
           enableDoubleColumn(context) == false
               ? transactionAmountAndCategoryHeader
