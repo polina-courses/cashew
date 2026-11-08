@@ -62,6 +62,45 @@ class HomePageTopUpSummary extends StatelessWidget {
             TransactionWallet first = needs.first.wallet;
             String money(double v, TransactionWallet w) =>
                 envelopeMoney(context, w, v);
+            Widget cell(String text,
+                {bool head = false,
+                bool bold = false,
+                bool left = false,
+                bool light = false}) {
+              return Padding(
+                padding: EdgeInsetsDirectional.only(
+                    start: left ? 0 : 12, top: 3, bottom: 3),
+                child: Align(
+                  alignment: left
+                      ? AlignmentDirectional.centerStart
+                      : AlignmentDirectional.centerEnd,
+                  child: left
+                      ? TextFont(
+                          text: text,
+                          fontSize: head ? 12 : 14,
+                          fontWeight:
+                              head || bold ? FontWeight.bold : FontWeight.normal,
+                          textColor: head ? getColor(context, "textLight") : null,
+                          maxLines: 1,
+                        )
+                      : FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: TextFont(
+                            text: text,
+                            fontSize: head ? 12 : 14,
+                            fontWeight: head || bold
+                                ? FontWeight.bold
+                                : FontWeight.normal,
+                            textColor: head || light
+                                ? getColor(context, "textLight")
+                                : null,
+                            maxLines: 1,
+                          ),
+                        ),
+                ),
+              );
+            }
+
             return Padding(
               padding: const EdgeInsetsDirectional.symmetric(
                   horizontal: 13, vertical: 7),
@@ -84,84 +123,59 @@ class HomePageTopUpSummary extends StatelessWidget {
                         fontWeight: FontWeight.bold,
                         maxLines: 2,
                       ),
-                      SizedBox(height: 6),
-                      for (_AccountNeed n in needs)
-                        Padding(
-                          padding: const EdgeInsetsDirectional.only(bottom: 4),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Expanded(
-                                child: TextFont(
-                                    text: n.wallet.name,
-                                    fontSize: 14,
-                                    maxLines: 1),
-                              ),
-                              SizedBox(width: 8),
-                              Flexible(
-                                child: TextFont(
-                                text: n.need <= 0
-                                    ? "хватает"
-                                    : beforeSalary
-                                        ? "ЗП " +
-                                            money(splitNeed(n.need, now).$1,
-                                                n.wallet) +
-                                            " · Ав " +
-                                            money(splitNeed(n.need, now).$2,
-                                                n.wallet)
-                                        : "Ав " + money(n.need, n.wallet),
-                                fontSize: 13,
-                                textColor: n.need <= 0
-                                    ? getColor(context, "textLight")
-                                    : null,
-                                maxLines: 2,
-                                textAlign: TextAlign.end,
-                              ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      Divider(),
-                      Row(
+                      SizedBox(height: 8),
+                      Table(
+                        columnWidths: const {
+                          0: FlexColumnWidth(),
+                          1: IntrinsicColumnWidth(),
+                          2: IntrinsicColumnWidth(),
+                          3: IntrinsicColumnWidth(),
+                        },
+                        defaultVerticalAlignment:
+                            TableCellVerticalAlignment.middle,
                         children: [
-                          Expanded(
-                            child: TextFont(
-                                text: "Всего",
-                                fontSize: 14,
-                                fontWeight: FontWeight.bold),
-                          ),
-                          Flexible(
-                            child: TextFont(
-                              text: total <= 0
-                                  ? "ничего не нужно"
-                                  : money(total, first),
-                              fontSize: 14,
-                              fontWeight: FontWeight.bold,
-                              maxLines: 2,
-                              textAlign: TextAlign.end,
+                          TableRow(children: [
+                            cell("Счёт", head: true, left: true),
+                            cell("ЗП", head: true),
+                            cell("Ав", head: true),
+                            cell("Итого", head: true),
+                          ]),
+                          for (_AccountNeed n in needs)
+                            () {
+                              var parts = splitNeed(n.need, now);
+                              bool ok = n.need <= 0;
+                              return TableRow(children: [
+                                cell(n.wallet.name, left: true),
+                                cell(ok || parts.$1 <= 0
+                                    ? "–"
+                                    : money(parts.$1, n.wallet)),
+                                cell(ok ? "–" : money(parts.$2, n.wallet)),
+                                cell(ok ? "хватает" : money(n.need, n.wallet),
+                                    bold: !ok, light: ok),
+                              ]);
+                            }(),
+                          TableRow(
+                            decoration: BoxDecoration(
+                              border: Border(
+                                top: BorderSide(
+                                    color: getColor(context, "dividerColor"),
+                                    width: 1),
+                              ),
                             ),
+                            children: [
+                              cell("Всего", bold: true, left: true),
+                              cell(totalSalary <= 0
+                                  ? "–"
+                                  : money(totalSalary, first), bold: true),
+                              cell(totalAdvance <= 0
+                                  ? "–"
+                                  : money(totalAdvance, first), bold: true),
+                              cell(total <= 0 ? "ничего" : money(total, first),
+                                  bold: true),
+                            ],
                           ),
                         ],
                       ),
-                      if (total > 0)
-                        Padding(
-                          padding: const EdgeInsetsDirectional.only(top: 2),
-                          child: Align(
-                            alignment: AlignmentDirectional.centerEnd,
-                            child: TextFont(
-                              text: beforeSalary
-                                  ? "ЗП " +
-                                      money(totalSalary, first) +
-                                      " · Ав " +
-                                      money(totalAdvance, first)
-                                  : "Ав " + money(total, first),
-                              fontSize: 13,
-                              maxLines: 2,
-                              textAlign: TextAlign.end,
-                              textColor: getColor(context, "textLight"),
-                            ),
-                          ),
-                        ),
                     ],
                   ),
                 ),
