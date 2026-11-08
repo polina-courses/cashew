@@ -341,6 +341,7 @@ class EnvelopeNeedLines extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // лежит / нужно (+ галочка, если хватает)
           Row(
             children: [
               Icon(Icons.calendar_month_rounded, size: 14, color: light),
@@ -350,25 +351,10 @@ class EnvelopeNeedLines extends StatelessWidget {
                   text: money(max(0.0, line.balance)) + " / " + money(required),
                   fontSize: 13,
                   textColor: light,
-                  maxLines: 1,
+                  maxLines: 2,
                 ),
               ),
-              if (line.need > 0) ...[
-                SizedBox(width: 8),
-                Text(
-                  "пополнить на ",
-                  style: TextStyle(
-                      fontSize: 13,
-                      fontStyle: FontStyle.italic,
-                      color: light.withOpacity(0.7)),
-                ),
-                TextFont(
-                  text: money(line.need),
-                  fontSize: 13,
-                  fontWeight: FontWeight.bold,
-                  textColor: getColor(context, "expenseAmount"),
-                ),
-              ] else ...[
+              if (line.need <= 0) ...[
                 SizedBox(width: 4),
                 Icon(Icons.check_rounded,
                     size: 16, color: getColor(context, "incomeAmount")),
@@ -376,10 +362,34 @@ class EnvelopeNeedLines extends StatelessWidget {
             ],
           ),
           if (line.need > 0)
+            // всё остальное переносится на новые строки, а не налезает
             Padding(
               padding: const EdgeInsetsDirectional.only(top: 4),
-              child: Row(
+              child: Wrap(
+                crossAxisAlignment: WrapCrossAlignment.center,
+                runSpacing: 4,
                 children: [
+                  Padding(
+                    padding: const EdgeInsetsDirectional.only(end: 6),
+                    child: Text.rich(
+                      TextSpan(children: [
+                        TextSpan(
+                          text: "пополнить на ",
+                          style: TextStyle(
+                              fontSize: 13,
+                              fontStyle: FontStyle.italic,
+                              color: light.withOpacity(0.7)),
+                        ),
+                        TextSpan(
+                          text: money(line.need),
+                          style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.bold,
+                              color: getColor(context, "expenseAmount")),
+                        ),
+                      ]),
+                    ),
+                  ),
                   if (DateTime.now().day > 25)
                     _Chip("Сейчас", money(line.need))
                   else ...[
