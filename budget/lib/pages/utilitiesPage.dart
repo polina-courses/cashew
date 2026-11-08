@@ -18,7 +18,8 @@ import 'package:provider/provider.dart';
 
 /// Локальная версия: вкладка «ЖКХ».
 class UtilitiesPage extends StatefulWidget {
-  const UtilitiesPage({super.key});
+  const UtilitiesPage({super.key, this.inTab = false});
+  final bool inTab;
 
   @override
   State<UtilitiesPage> createState() => _UtilitiesPageState();
@@ -84,13 +85,15 @@ class _UtilitiesPageState extends State<UtilitiesPage> {
 
   @override
   Widget build(BuildContext context) {
+    // перечитываем: вкладка и страница из «Ещё» хранят одни и те же данные
+    items = utilitiesFromSettings(appStateSettings["utilities"]);
     DateTime now = DateTime.now();
     Color light = getColor(context, "textLight");
     double left = utilitiesLeftToPay(items, now);
     int paidCount = items.where((i) => i.isPaid(now)).length;
     return PageFramework(
       horizontalPaddingConstrained: true,
-      dragDownToDismiss: true,
+      dragDownToDismiss: !widget.inTab,
       title: "ЖКХ",
       floatingActionButton: AnimateFABDelayed(
         fab: AddFAB(tooltip: "Добавить пункт", onTap: addItem),

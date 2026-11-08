@@ -80,6 +80,8 @@ class BottomNavBarState extends State<BottomNavBar> {
       return navBarIconsData[appStateSettings["customNavBarShortcut2"]]
               ?.navigationIndexedStackIndex ??
           2;
+    } else if (barIndex == 3) {
+      return 19; // ЖКХ
     } else {
       return 3;
     }
@@ -101,8 +103,10 @@ class BottomNavBarState extends State<BottomNavBar> {
                 ?.navigationIndexedStackIndex ??
             2))
       return 2;
-    else
+    else if (stackedIndex == 19)
       return 3;
+    else
+      return 4;
   }
 
   @override
@@ -195,13 +199,23 @@ class BottomNavBarState extends State<BottomNavBar> {
                 flex: 20,
                 child: NavBarIcon(
                   onItemTapped: onItemTapped,
-                  icon: navBarIconsData["more"]!.iconData,
+                  icon: navBarIconsData["utilities"]!.iconData,
                   navigationBarIndex: 3,
                   currentNavigationBarIndex: navigationBarIndex,
                 ),
               ),
               NavBarSpaceButton(
-                onPress: () => onItemTapped(3),
+                onPress: () => onItemTapped(4),
+                flex: 20,
+                child: NavBarIcon(
+                  onItemTapped: onItemTapped,
+                  icon: navBarIconsData["more"]!.iconData,
+                  navigationBarIndex: 4,
+                  currentNavigationBarIndex: navigationBarIndex,
+                ),
+              ),
+              NavBarSpaceButton(
+                onPress: () => onItemTapped(4),
                 flex: 9,
                 child: Container(),
               ),
@@ -297,6 +311,11 @@ class BottomNavBarState extends State<BottomNavBar> {
                   tooltip: "",
                 );
               },
+            ),
+            NavigationDestination(
+              icon: Icon(navBarIconsData["utilities"]!.iconData),
+              label: navBarIconsData["utilities"]!.label,
+              tooltip: "",
             ),
             NavigationDestination(
               icon: Icon(navBarIconsData["more"]!.iconData),

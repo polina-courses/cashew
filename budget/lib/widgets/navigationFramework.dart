@@ -25,6 +25,7 @@ import 'package:budget/pages/onBoardingPage.dart';
 import 'package:budget/pages/premiumPage.dart';
 import 'package:budget/pages/settingsPage.dart';
 import 'package:budget/pages/subscriptionsPage.dart';
+import 'package:budget/pages/utilitiesPage.dart';
 import 'package:budget/pages/transactionsListPage.dart';
 import 'package:budget/pages/upcomingOverdueTransactionsPage.dart';
 import 'package:budget/pages/walletDetailsPage.dart';
@@ -379,6 +380,7 @@ class PageNavigationFrameworkState extends State<PageNavigationFramework> {
         overdueTransactions: null), //16
     CreditDebtTransactions(key: creditDebtTransactionsKey, isCredit: null), //17
     UpcomingCalendarPage(enableBackButton: false), //18
+    UtilitiesPage(inTab: true), //19
   ];
 
   late int currentPage = widget.widthSideNavigationBar <= 0

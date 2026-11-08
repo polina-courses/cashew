@@ -83,6 +83,14 @@ Map<String, NavBarIconData> getNavBarIconsData() {
       label: "loans",
       navigationIndexedStackIndex: 17,
     ),
+    // Локальная версия: пятая иконка нижнего меню
+    "utilities": NavBarIconData(
+      iconData: appStateSettings["outlinedIcons"]
+          ? Icons.home_work_outlined
+          : Icons.home_work_rounded,
+      label: "ЖКХ",
+      navigationIndexedStackIndex: 19,
+    ),
     "notifications": NavBarIconData(
       iconData: appStateSettings["outlinedIcons"]
           ? Icons.notifications_outlined
