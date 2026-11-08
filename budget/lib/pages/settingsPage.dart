@@ -2,6 +2,7 @@ import 'package:budget/colors.dart';
 import 'package:budget/database/tables.dart' hide AppSettings;
 import 'package:budget/pages/aboutPage.dart';
 import 'package:budget/widgets/categoryTopUp.dart';
+import 'package:budget/pages/utilitiesPage.dart';
 import 'package:budget/pages/addTransactionPage.dart';
 import 'package:budget/pages/billSplitter.dart';
 import 'package:budget/pages/budgetsListPage.dart';
@@ -117,6 +118,12 @@ class MoreActionsPageState extends State<MoreActionsPage> {
         ],
         listWidgets: [
           // Локальная версия: проверка обновлений из GitHub Releases
+          SettingsContainer(
+            title: "ЖКХ",
+            description: "Платежи раз в месяц, отметка оплаты, переплаты",
+            icon: Icons.home_work_outlined,
+            onTap: () => pushRoute(context, UtilitiesPage()),
+          ),
           SettingsContainer(
             title: "Пополнить счета категорий",
             description: "Распределить деньги с общего счёта по категориям",

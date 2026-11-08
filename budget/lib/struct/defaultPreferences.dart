@@ -118,6 +118,7 @@ Future<Map<String, dynamic>> getDefaultPreferences() async {
     // Локальная версия: категория расхода → счёт по умолчанию {categoryPk: walletPk}
     "categoryWalletLinks": <String, dynamic>{},
     "envelopePlans": <String, dynamic>{},
+    "utilities": <dynamic>[],
     "walletPlans": <String, dynamic>{},
     "envelopeSweep": <String, dynamic>{},
     "envelopeMeta": <String, dynamic>{},
