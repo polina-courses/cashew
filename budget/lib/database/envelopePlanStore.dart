@@ -237,6 +237,23 @@ extension EnvelopePlanQueries on FinanceDatabase {
     }
   }
 
+  /// Баланс счёта уменьшили (например, обнулили), а в подгруппах деньги
+  /// остались: снимаем излишек с подгрупп, чтобы сумма сошлась со счётом.
+  Future<void> shrinkEnvelopesToWallet(String walletPk) async {
+    EnvelopeBalances balances = await getEnvelopeBalances(walletPk);
+    if (balances.free >= -0.005) return;
+    Map<String, double> take = shrinkToWallet(
+        lines: planLinesOf(balances, {}), walletTotal: balances.walletTotal);
+    for (MapEntry<String, double> e in take.entries) {
+      await addEnvelopeMove(
+        walletPk: walletPk,
+        fromEnvelopePk: e.key,
+        toEnvelopePk: null,
+        amount: e.value,
+      );
+    }
+  }
+
   /// Минусов быть не должно: нехватку в подгруппе закрывают «Свободные».
   /// Если свободных нет, минус остаётся (его видно красным).
   Future<void> fixNegativeEnvelopes(String walletPk) async {
@@ -397,6 +414,7 @@ extension EnvelopePlanQueries on FinanceDatabase {
   Future<void> prepareEnvelopes(String walletPk) async {
     await removeFinishedTemporaryEnvelopes(walletPk);
     await sweepEnvelopesIfMonthChanged(walletPk);
+    await shrinkEnvelopesToWallet(walletPk);
     await fixNegativeEnvelopes(walletPk);
     await snapshotEnvelopeBases(walletPk);
   }

@@ -147,3 +147,43 @@ List<PlanMove> sweepMonthEnd({
   if (now.day <= 12) return (need * 2 / 3, need / 3);
   return (0.0, need);
 }
+
+/// Денег на счёте стало меньше, чем распределено по подгруппам (например,
+/// обнулили баланс счёта): излишек снимается с подгрупп. Сначала с низкого
+/// приоритета, внутри одного приоритета — пропорционально остаткам.
+/// Возвращает, сколько снять с каждой подгруппы (pk → сумма > 0).
+Map<String, double> shrinkToWallet({
+  required List<PlanLine> lines,
+  required double walletTotal,
+  int decimals = 2,
+}) {
+  double allocated = 0;
+  for (PlanLine l in lines) allocated += l.balance;
+  double excess = allocated - max(0.0, walletTotal);
+  Map<String, double> take = {};
+  if (excess <= 0.005) return take;
+  for (EnvelopePriority p in [
+    EnvelopePriority.low,
+    EnvelopePriority.medium,
+    EnvelopePriority.high
+  ]) {
+    if (excess <= 0.005) break;
+    List<PlanLine> group =
+        lines.where((l) => l.priority == p && l.balance > 0.005).toList();
+    double groupSum = group.fold(0.0, (sum, l) => sum + l.balance);
+    if (groupSum <= 0) continue;
+    double groupTake = min(excess, groupSum);
+    double taken = 0;
+    for (int i = 0; i < group.length; i++) {
+      PlanLine l = group[i];
+      double part = i == group.length - 1
+          ? _round(groupTake - taken, decimals)
+          : _round(groupTake * l.balance / groupSum, decimals);
+      part = min(part, l.balance);
+      if (part > 0) take[l.pk] = part;
+      taken += part;
+    }
+    excess -= groupTake;
+  }
+  return take;
+}

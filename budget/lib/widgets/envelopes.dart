@@ -190,6 +190,11 @@ class WalletEnvelopesSection extends StatelessWidget {
       builder: (context, snapshot) {
         EnvelopeBalances? data = snapshot.data;
         if (data == null) return SizedBox.shrink();
+        // денег на счёте меньше, чем в подгруппах (например, обнулили счёт)
+        if (data.free < -0.005) {
+          Future.microtask(
+              () => database.shrinkEnvelopesToWallet(wallet.walletPk));
+        }
         return Padding(
           padding: const EdgeInsetsDirectional.only(bottom: 13),
           child: Container(

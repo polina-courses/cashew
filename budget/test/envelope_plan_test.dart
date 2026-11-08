@@ -138,4 +138,37 @@ void main() {
       expect(split.$2, 1000);
     });
   });
+
+  group('shrinkToWallet', () {
+    test('счёт обнулили: всё снимается с подгрупп', () {
+      var take = shrinkToWallet(
+          lines: [line("tutors", balance: 6000)], walletTotal: 0);
+      expect(take["tutors"], 6000);
+    });
+
+    test('хватает денег: ничего не снимаем', () {
+      expect(
+          shrinkToWallet(
+              lines: [line("a", balance: 1000)], walletTotal: 1000),
+          isEmpty);
+    });
+
+    test('сначала снимается с низкого приоритета', () {
+      var take = shrinkToWallet(lines: [
+        line("high", balance: 3000, priority: EnvelopePriority.high),
+        line("low", balance: 2000, priority: EnvelopePriority.low),
+      ], walletTotal: 4000);
+      expect(take["low"], 1000);
+      expect(take.containsKey("high"), false);
+    });
+
+    test('внутри приоритета пропорционально, сумма сходится', () {
+      var take = shrinkToWallet(
+          lines: [line("a", balance: 3000), line("b", balance: 1000)],
+          walletTotal: 2000);
+      expect(take["a"]! + take["b"]!, 2000);
+      expect(take["a"], 1500);
+      expect(take["b"], 500);
+    });
+  });
 }
