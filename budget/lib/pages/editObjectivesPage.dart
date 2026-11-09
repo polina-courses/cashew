@@ -418,7 +418,33 @@ Future<DeletePopupAction?> deleteObjectivePopup(
     int? numTransactions = await database
         .getTotalCountOfTransactionsInObjective(objective.objectivePk)
         .$2;
-    if (numTransactions != null && numTransactions > 0) {
+    if (numTransactions != null &&
+        numTransactions > 0 &&
+        objective.type == ObjectiveType.loan) {
+      // Локальная версия: можно удалить кредит вместе с его записями
+      result = await openPopup(
+        context,
+        title: "Удалить кредит вместе с записями?",
+        description: "По кредиту записей: $numTransactions. Если удалить их, "
+            "деньги на счетах вернутся как было. Если оставить, они станут "
+            "обычными расходами и доходами.",
+        icon: appStateSettings["outlinedIcons"]
+            ? Icons.warning_outlined
+            : Icons.warning_rounded,
+        onCancel: () {
+          popRoute(context, false);
+        },
+        onCancelLabel: "cancel".tr(),
+        onSubmit: () async {
+          popRoute(context, "all");
+        },
+        onSubmitLabel: "Удалить с записями",
+        onExtra: () {
+          popRoute(context, "keep");
+        },
+        onExtraLabel: "Оставить записи",
+      );
+    } else if (numTransactions != null && numTransactions > 0) {
       result = await openPopup(
         context,
         title: objective.type == ObjectiveType.loan
@@ -442,14 +468,15 @@ Future<DeletePopupAction?> deleteObjectivePopup(
             : "delete-goal".tr(),
       );
     }
-    if (result == true) {
+    if (result == true || result == "all" || result == "keep") {
       if (routesToPopAfterDelete == RoutesToPopAfterDelete.All) {
         popAllRoutes(context);
       } else if (routesToPopAfterDelete == RoutesToPopAfterDelete.One) {
         popRoute(context);
       }
       openLoadingPopupTryCatch(() async {
-        await database.deleteObjective(context, objective);
+        await database.deleteObjective(context, objective,
+            deleteTransactions: result == "all");
         openSnackbar(
           SnackbarMessage(
             title: objective.type == ObjectiveType.loan

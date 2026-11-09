@@ -1,5 +1,6 @@
 import 'package:budget/database/tables.dart';
 import 'package:budget/functions.dart';
+import 'package:budget/struct/categoryAccounts.dart';
 import 'package:budget/pages/addCategoryPage.dart';
 import 'package:budget/pages/addTransactionPage.dart';
 import 'package:budget/pages/editObjectivesPage.dart';
@@ -322,6 +323,17 @@ class _AddObjectivePageState extends State<AddObjectivePage>
   @override
   void initState() {
     super.initState();
+    if (widget.objective == null) {
+      // Локальная версия: новый кредит/цель по умолчанию на общем счёте, а не
+      // на том, что сейчас выбран на главной (иначе деньги списываются со счёта категории)
+      Future.delayed(Duration.zero, () async {
+        List<TransactionWallet> all = await database.getAllWallets();
+        if (all.isEmpty || !mounted) return;
+        setState(() {
+          selectedWalletPk = mainWalletPk(all);
+        });
+      });
+    }
     if (widget.objective != null) {
       //We are editing an objective
       //Fill in the information from the passed in objective

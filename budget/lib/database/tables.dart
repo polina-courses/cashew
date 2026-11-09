@@ -4953,10 +4953,18 @@ class FinanceDatabase extends _$FinanceDatabase {
         .go();
   }
 
-  Future<int> deleteObjective(context, Objective objective) async {
+  Future<int> deleteObjective(context, Objective objective,
+      {bool deleteTransactions = false}) async {
     // Clear the objective the transactions are added to
     List<Transaction> transactionsAddedToThisObjective =
         await getAllTransactionsBelongingToObjective(objective.objectivePk);
+    // Локальная версия: удалить кредит вместе с его записями (деньги на счетах вернутся)
+    if (deleteTransactions && objective.type == ObjectiveType.loan) {
+      for (Transaction t in transactionsAddedToThisObjective) {
+        await deleteTransaction(t.transactionPk);
+      }
+      transactionsAddedToThisObjective = [];
+    }
     await moveTransactionsToObjective(
         transactionsAddedToThisObjective, null, ObjectiveType.goal);
     await moveTransactionsToObjective(
