@@ -217,55 +217,11 @@ class _AddObjectivePageState extends State<AddObjectivePage>
   }
 
   Future addObjective() async {
-    MainAndSubcategory? mainAndSubcategory;
-    if (widget.objective == null &&
-        widget.objectiveType == ObjectiveType.loan &&
-        isDifferenceOnlyLoan == false) {
-      mainAndSubcategory = await selectCategorySequence(
-        context,
-        selectedCategory: null,
-        setSelectedCategory: (_) {},
-        selectedSubCategory: null,
-        setSelectedSubCategory: (_) {},
-        selectedIncomeInitial: null,
-        subtitle: "select-first-transaction-category".tr(),
-      );
-      if (mainAndSubcategory.main == null) {
-        return;
-      }
-    }
-
+    // Локальная версия: кредит — отдельный долг. Никаких записей на счетах при
+    // оформлении: сумма хранится в самом кредите, гасить его можно платежами.
     print("Added objective");
-    int rowId = await database.createOrUpdateObjective(
+    await database.createOrUpdateObjective(
         insert: widget.objective == null, await createObjective());
-
-    // Create the initial transaction if it is a loan
-    if (widget.objective == null &&
-        widget.objectiveType == ObjectiveType.loan &&
-        isDifferenceOnlyLoan == false) {
-      final Objective objectiveJustAdded =
-          await database.getObjectiveFromRowId(rowId);
-      if (mainAndSubcategory?.main != null) {
-        await database.createOrUpdateTransaction(
-          insert: true,
-          Transaction(
-            transactionPk: "-1",
-            name: "initial-record".tr(),
-            note: "",
-            amount: selectedAmount.abs() * (!selectedIncome ? 1 : -1),
-            categoryFk: mainAndSubcategory!.main!.categoryPk,
-            subCategoryFk: mainAndSubcategory.sub?.categoryPk,
-            walletFk: selectedWalletPk,
-            dateCreated: DateTime.now(),
-            income: !selectedIncome,
-            paid: true,
-            skipPaid: false,
-            type: null,
-            objectiveLoanFk: objectiveJustAdded.objectivePk,
-          ),
-        );
-      }
-    }
     savingHapticFeedback();
     popRoute(context);
   }
@@ -295,10 +251,9 @@ class _AddObjectivePageState extends State<AddObjectivePage>
               appStateSettings["longTermLoansDifferenceFeature"] == true
           // This defines what a difference only loan can be
           ? -1
-          // Set to zero if adding a new long term loan, otherwise keep its amount because of the total offset
-          : objectiveType == ObjectiveType.loan && widget.objective == null
-              ? 0
-              : selectedAmount,
+          // Локальная версия: сумма нового кредита хранится в самом кредите
+          // (без первоначальной записи на счёте)
+          : selectedAmount,
       income: selectedIncome,
       pinned: selectedPin,
       walletFk: selectedWalletPk,
