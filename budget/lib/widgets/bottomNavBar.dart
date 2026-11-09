@@ -1,6 +1,9 @@
 import 'dart:math';
 import 'package:budget/functions.dart';
 import 'package:budget/pages/editBudgetPage.dart';
+import 'package:budget/pages/homePage/newHomePage.dart';
+import 'package:budget/pages/walletsTabPage.dart';
+import 'package:budget/widgets/fab.dart';
 import 'package:budget/pages/editHomePage.dart';
 import 'package:budget/pages/editObjectivesPage.dart';
 import 'package:budget/pages/subscriptionsPage.dart';
@@ -36,298 +39,140 @@ class BottomNavBar extends StatefulWidget {
 }
 
 class BottomNavBarState extends State<BottomNavBar> {
-  void onItemTapped(int indexOfNavigationBar, {bool allowReApply = false}) {
-    int navigationStackedIndex =
-        getNavigationStackedIndexFromBarIndex(indexOfNavigationBar);
+  // Локальная версия: четыре раздела и кнопка «+» посередине.
+  // Номера страниц в navigationFramework: 0 главная, 20 счета, 18 календарь, 19 ЖКХ.
+  static const List<int> _stackIndexOfBarIndex = [0, 20, -1, 18, 19];
 
-    if (navigationStackedIndex == widget.currentNavigationStackedIndex &&
-        allowReApply == false) {
-      if (navigationStackedIndex == 0)
-        homePageStateKey.currentState?.scrollToTop();
-      if (navigationStackedIndex == 1)
-        transactionsListPageStateKey.currentState?.scrollToTop();
-      if (navigationStackedIndex == 2)
-        budgetsListPageStateKey.currentState?.scrollToTop();
-      if (navigationStackedIndex == 3)
-        settingsPageStateKey.currentState?.scrollToTop();
-      if (navigationStackedIndex == 5)
-        subscriptionsPageStateKey.currentState?.scrollToTop();
-      if (navigationStackedIndex == 7)
-        walletDetailsAllSpendingPageStateKey.currentState?.scrollToTop();
-      if (navigationStackedIndex == 14)
-        objectivesListPageStateKey.currentState?.scrollToTop();
-      if (navigationStackedIndex == 16)
-        upcomingOverdueTransactionsStateKey.currentState?.scrollToTop();
-      if (navigationStackedIndex == 17)
-        creditDebtTransactionsKey.currentState?.scrollToTop();
-    } else {
-      // We need to change to the navigation index
-      widget.onChanged(navigationStackedIndex);
+  void onItemTapped(int barIndex) {
+    if (barIndex == 2) {
+      openAddTransactionTypePicker(context);
+      return;
     }
-    FocusScope.of(context).unfocus(); //remove keyboard focus on any input boxes
-  }
-
-  int getNavigationStackedIndexFromBarIndex(int barIndex) {
-    if (barIndex == 0) {
-      return navBarIconsData[appStateSettings["customNavBarShortcut0"]]
-              ?.navigationIndexedStackIndex ??
-          0;
-    } else if (barIndex == 1) {
-      return navBarIconsData[appStateSettings["customNavBarShortcut1"]]
-              ?.navigationIndexedStackIndex ??
-          1;
-    } else if (barIndex == 2) {
-      return navBarIconsData[appStateSettings["customNavBarShortcut2"]]
-              ?.navigationIndexedStackIndex ??
-          2;
-    } else if (barIndex == 3) {
-      return 19; // ЖКХ
+    int stackIndex = _stackIndexOfBarIndex[barIndex];
+    if (stackIndex == widget.currentNavigationStackedIndex) {
+      if (stackIndex == 0) newHomePageStateKey.currentState?.scrollToTop();
+      if (stackIndex == 20) walletsTabPageStateKey.currentState?.scrollToTop();
     } else {
-      return 3;
+      widget.onChanged(stackIndex);
     }
+    FocusScope.of(context).unfocus();
   }
 
-  int getNavigationBarIndexFromStackedIndex(int stackedIndex) {
-    if (stackedIndex ==
-        (navBarIconsData[appStateSettings["customNavBarShortcut0"]]
-                ?.navigationIndexedStackIndex ??
-            0))
-      return 0;
-    else if (stackedIndex ==
-        (navBarIconsData[appStateSettings["customNavBarShortcut1"]]
-                ?.navigationIndexedStackIndex ??
-            1))
-      return 1;
-    else if (stackedIndex ==
-        (navBarIconsData[appStateSettings["customNavBarShortcut2"]]
-                ?.navigationIndexedStackIndex ??
-            2))
-      return 2;
-    else if (stackedIndex == 19)
-      return 3;
-    else
-      return 4;
+  int getBarIndexFromStackedIndex(int stackedIndex) {
+    int i = _stackIndexOfBarIndex.indexOf(stackedIndex);
+    return i; // -1: открыта страница вне меню (например, «Ещё»)
   }
 
-  @override
-  Widget build(BuildContext context) {
-    // The index of the actual navigation bar, this is not the navigation stack index
-    int navigationBarIndex = getNavigationBarIndexFromStackedIndex(
-        widget.currentNavigationStackedIndex);
-
-    if (getIsFullScreen(context)) return SizedBox.shrink();
-    if (getPlatform() == PlatformOS.isIOS) {
-      return IntrinsicHeight(
-        child: Container(
-          decoration: BoxDecoration(
-            color: getBottomNavbarBackgroundColor(
-              colorScheme: Theme.of(context).colorScheme,
-              brightness: Theme.of(context).brightness,
-              lightDarkAccent: getColor(context, "lightDarkAccent"),
-            ),
-            boxShadow: boxShadowSharp(context),
-          ),
-          padding: EdgeInsetsDirectional.only(
-              top: 2,
-              bottom: max(2, MediaQuery.paddingOf(context).bottom - 5.5)),
-          child: Row(
+  Widget _item(BuildContext context,
+      {required int barIndex,
+      required IconData icon,
+      required String label,
+      required bool selected}) {
+    Color color = selected
+        ? Theme.of(context).colorScheme.primary
+        : getColor(context, "textLight");
+    return Expanded(
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () {
+          Feedback.forTap(context);
+          onItemTapped(barIndex);
+        },
+        child: ConstrainedBox(
+          constraints: BoxConstraints(minHeight: 56),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              NavBarSpaceButton(
-                onPress: () => onItemTapped(0),
-                flex: 9,
-                child: Container(),
-              ),
-              NavBarSpaceButton(
-                onPress: () => onItemTapped(0),
-                flex: 20,
-                child: CustomizableNavigationBarIcon(
-                  shortcutAppSettingKey: "customNavBarShortcut0",
-                  afterSet: () {
-                    onItemTapped(0, allowReApply: true);
-                  },
-                  navigationBarIconBuilder: (NavBarIconData iconData) {
-                    return NavBarIcon(
-                      icon: iconData.iconData,
-                      customIconScale: iconData.iconScale,
-                      onItemTapped: onItemTapped,
-                      navigationBarIndex: 0,
-                      currentNavigationBarIndex: navigationBarIndex,
-                    );
-                  },
+              Icon(icon, size: 26, color: color),
+              SizedBox(height: 3),
+              Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontFamily: appStateSettings["font"],
+                  fontFamilyFallback: ['Inter'],
+                  fontSize: 12,
+                  fontWeight: selected ? FontWeight.bold : FontWeight.w500,
+                  color: color,
                 ),
-              ),
-              NavBarSpaceButton(
-                onPress: () => onItemTapped(1),
-                flex: 20,
-                child: CustomizableNavigationBarIcon(
-                  shortcutAppSettingKey: "customNavBarShortcut1",
-                  afterSet: () {
-                    onItemTapped(1, allowReApply: true);
-                  },
-                  navigationBarIconBuilder: (NavBarIconData iconData) {
-                    return NavBarIcon(
-                      icon: iconData.iconData,
-                      customIconScale: iconData.iconScale,
-                      onItemTapped: onItemTapped,
-                      navigationBarIndex: 1,
-                      currentNavigationBarIndex: navigationBarIndex,
-                    );
-                  },
-                ),
-              ),
-              NavBarSpaceButton(
-                onPress: () => onItemTapped(2),
-                flex: 20,
-                child: CustomizableNavigationBarIcon(
-                  shortcutAppSettingKey: "customNavBarShortcut2",
-                  afterSet: () {
-                    onItemTapped(2, allowReApply: true);
-                  },
-                  navigationBarIconBuilder: (NavBarIconData iconData) {
-                    return NavBarIcon(
-                      icon: iconData.iconData,
-                      customIconScale: iconData.iconScale,
-                      onItemTapped: onItemTapped,
-                      navigationBarIndex: 2,
-                      currentNavigationBarIndex: navigationBarIndex,
-                    );
-                  },
-                ),
-              ),
-              NavBarSpaceButton(
-                onPress: () => onItemTapped(3),
-                flex: 20,
-                child: NavBarIcon(
-                  onItemTapped: onItemTapped,
-                  icon: navBarIconsData["utilities"]!.iconData,
-                  navigationBarIndex: 3,
-                  currentNavigationBarIndex: navigationBarIndex,
-                ),
-              ),
-              NavBarSpaceButton(
-                onPress: () => onItemTapped(4),
-                flex: 20,
-                child: NavBarIcon(
-                  onItemTapped: onItemTapped,
-                  icon: navBarIconsData["more"]!.iconData,
-                  navigationBarIndex: 4,
-                  currentNavigationBarIndex: navigationBarIndex,
-                ),
-              ),
-              NavBarSpaceButton(
-                onPress: () => onItemTapped(4),
-                flex: 9,
-                child: Container(),
               ),
             ],
           ),
         ),
-      );
-    }
-    // Android navbar
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (getIsFullScreen(context)) return SizedBox.shrink();
+    int selected = getBarIndexFromStackedIndex(widget.currentNavigationStackedIndex);
+    bool outlined = appStateSettings["outlinedIcons"] == true;
     return Container(
       decoration: BoxDecoration(
+        color: getBottomNavbarBackgroundColor(
+          colorScheme: Theme.of(context).colorScheme,
+          brightness: Theme.of(context).brightness,
+          lightDarkAccent: getColor(context, "lightDarkAccent"),
+        ),
         boxShadow: boxShadowSharp(context),
       ),
-      child: NavigationBarTheme(
-        data: NavigationBarThemeData(
-          backgroundColor: getBottomNavbarBackgroundColor(
-            colorScheme: Theme.of(context).colorScheme,
-            brightness: Theme.of(context).brightness,
-            lightDarkAccent: getColor(context, "lightDarkAccent"),
+      padding: EdgeInsetsDirectional.only(
+          top: 4, bottom: max(4, MediaQuery.paddingOf(context).bottom)),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          _item(context,
+              barIndex: 0,
+              icon: outlined ? Icons.home_outlined : Icons.home_rounded,
+              label: "Главная",
+              selected: selected == 0),
+          _item(context,
+              barIndex: 1,
+              icon: outlined
+                  ? Icons.account_balance_wallet_outlined
+                  : Icons.account_balance_wallet_rounded,
+              label: "Счета",
+              selected: selected == 1),
+          Expanded(
+            child: Center(
+              child: Semantics(
+                button: true,
+                label: "Добавить",
+                child: GestureDetector(
+                  onTap: () {
+                    Feedback.forTap(context);
+                    onItemTapped(2);
+                  },
+                  child: Container(
+                    width: 56,
+                    height: 56,
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.primary,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(Icons.add_rounded,
+                        size: 30,
+                        color: Theme.of(context).colorScheme.onPrimary),
+                  ),
+                ),
+              ),
+            ),
           ),
-          surfaceTintColor: Colors.transparent,
-          indicatorColor: appStateSettings["materialYou"]
-              ? dynamicPastel(context, Theme.of(context).colorScheme.primary,
-                  amount: 0.6)
-              : null,
-          labelTextStyle: MaterialStateProperty.resolveWith((states) {
-            if (states.contains(MaterialState.selected)) {
-              return TextStyle(
-                fontFamily: appStateSettings["font"],
-                fontFamilyFallback: ['Inter'],
-                fontSize: 13,
-                fontWeight: FontWeight.bold,
-                overflow: TextOverflow.clip,
-              );
-            } else {
-              return TextStyle(
-                fontFamily: appStateSettings["font"],
-                fontFamilyFallback: ['Inter'],
-                fontSize: 13,
-                overflow: TextOverflow.clip,
-              );
-            }
-          }),
-          labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-        ),
-        child: NavigationBar(
-          animationDuration: Duration(milliseconds: 1000),
-          destinations: [
-            CustomizableNavigationBarIcon(
-              shortcutAppSettingKey: "customNavBarShortcut0",
-              afterSet: () {
-                onItemTapped(0, allowReApply: true);
-              },
-              navigationBarIconBuilder: (NavBarIconData iconData) {
-                return NavigationDestination(
-                  icon: Icon(iconData.iconData, size: iconData.iconSize),
-                  label: iconData.label.tr().length > 15 &&
-                          iconData.labelShort != null
-                      ? (iconData.labelShort ?? "").tr()
-                      : iconData.label.tr(),
-                  tooltip: "",
-                );
-              },
-            ),
-            CustomizableNavigationBarIcon(
-              shortcutAppSettingKey: "customNavBarShortcut1",
-              afterSet: () {
-                onItemTapped(1, allowReApply: true);
-              },
-              navigationBarIconBuilder: (NavBarIconData iconData) {
-                return NavigationDestination(
-                  icon: Icon(iconData.iconData, size: iconData.iconSize),
-                  label: iconData.label.tr().length > 15 &&
-                          iconData.labelShort != null
-                      ? (iconData.labelShort ?? "").tr()
-                      : iconData.label.tr(),
-                  tooltip: "",
-                );
-              },
-            ),
-            CustomizableNavigationBarIcon(
-              shortcutAppSettingKey: "customNavBarShortcut2",
-              afterSet: () {
-                onItemTapped(2, allowReApply: true);
-              },
-              navigationBarIconBuilder: (NavBarIconData iconData) {
-                return NavigationDestination(
-                  icon: Icon(iconData.iconData, size: iconData.iconSize),
-                  label: iconData.label.tr().length > 15 &&
-                          iconData.labelShort != null
-                      ? (iconData.labelShort ?? "").tr()
-                      : iconData.label.tr(),
-                  tooltip: "",
-                );
-              },
-            ),
-            NavigationDestination(
-              icon: Icon(navBarIconsData["utilities"]!.iconData),
-              label: navBarIconsData["utilities"]!.label,
-              tooltip: "",
-            ),
-            NavigationDestination(
-              icon: Icon(navBarIconsData["more"]!.iconData),
-              label: navBarIconsData["more"]!.label.tr(),
-              tooltip: "",
-            ),
-          ],
-          selectedIndex: navigationBarIndex,
-          onDestinationSelected: (value) {
-            onItemTapped(value);
-          },
-        ),
+          _item(context,
+              barIndex: 3,
+              icon: outlined
+                  ? Icons.calendar_month_outlined
+                  : Icons.calendar_month_rounded,
+              label: "Календарь",
+              selected: selected == 3),
+          _item(context,
+              barIndex: 4,
+              icon: outlined ? Icons.home_work_outlined : Icons.home_work_rounded,
+              label: "ЖКХ",
+              selected: selected == 4),
+        ],
       ),
     );
   }

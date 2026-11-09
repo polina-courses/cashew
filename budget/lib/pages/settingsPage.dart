@@ -71,7 +71,9 @@ import 'package:budget/widgets/outlinedButtonStacked.dart';
 class MoreActionsPage extends StatefulWidget {
   const MoreActionsPage({
     Key? key,
+    this.showBackButton = false,
   }) : super(key: key);
+  final bool showBackButton;
 
   @override
   State<MoreActionsPage> createState() => MoreActionsPageState();
@@ -95,7 +97,7 @@ class MoreActionsPageState extends State<MoreActionsPage> {
       return PageFramework(
         key: pageState,
         title: "more-actions".tr(),
-        backButton: false,
+        backButton: widget.showBackButton,
         horizontalPaddingConstrained: true,
         actions: [
           CustomPopupMenuButton(
@@ -118,6 +120,24 @@ class MoreActionsPageState extends State<MoreActionsPage> {
         ],
         listWidgets: [
           // Локальная версия: проверка обновлений из GitHub Releases
+          SettingsContainer(
+            title: "Все операции",
+            description: "Список расходов и доходов по месяцам",
+            icon: Icons.receipt_long_outlined,
+            onTap: () => pushRoute(context, TransactionsListPage()),
+          ),
+          SettingsContainer(
+            title: "Долги и кредиты",
+            description: "Отдельные долги, платежи по ним",
+            icon: Icons.account_balance_outlined,
+            onTap: () => pushRoute(context, CreditDebtTransactions(isCredit: null)),
+          ),
+          SettingsContainer(
+            title: "Цели накоплений",
+            description: "Копить на что-то и вносить взносы",
+            icon: Icons.savings_outlined,
+            onTap: () => pushRoute(context, ObjectivesListPage(backButton: true)),
+          ),
           SettingsContainer(
             title: "ЖКХ",
             description: "Платежи раз в месяц, отметка оплаты, переплаты",

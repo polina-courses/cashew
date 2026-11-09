@@ -27,6 +27,8 @@ import 'package:budget/pages/settingsPage.dart';
 import 'package:budget/pages/subscriptionsPage.dart';
 import 'package:budget/database/envelopePlanStore.dart';
 import 'package:budget/pages/utilitiesPage.dart';
+import 'package:budget/pages/homePage/newHomePage.dart';
+import 'package:budget/pages/walletsTabPage.dart';
 import 'package:budget/pages/transactionsListPage.dart';
 import 'package:budget/pages/upcomingOverdueTransactionsPage.dart';
 import 'package:budget/pages/walletDetailsPage.dart';
@@ -357,7 +359,7 @@ Future<bool> runAllCloudFunctions(BuildContext context,
 
 class PageNavigationFrameworkState extends State<PageNavigationFramework> {
   final List<Widget> pages = [
-    HomePage(key: homePageStateKey), // 0
+    NewHomePage(key: newHomePageStateKey), // 0
     TransactionsListPage(key: transactionsListPageStateKey), //1
     BudgetsListPage(key: budgetsListPageStateKey, enableBackButton: false), //2
     MoreActionsPage(key: settingsPageStateKey), //3
@@ -382,6 +384,7 @@ class PageNavigationFrameworkState extends State<PageNavigationFramework> {
     CreditDebtTransactions(key: creditDebtTransactionsKey, isCredit: null), //17
     UpcomingCalendarPage(enableBackButton: false), //18
     UtilitiesPage(inTab: true), //19
+    WalletsTabPage(key: walletsTabPageStateKey), //20
   ];
 
   late int currentPage = widget.widthSideNavigationBar <= 0
