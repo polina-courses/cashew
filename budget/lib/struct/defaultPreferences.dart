@@ -119,6 +119,8 @@ Future<Map<String, dynamic>> getDefaultPreferences() async {
     "categoryWalletLinks": <String, dynamic>{},
     "envelopePlans": <String, dynamic>{},
     "utilities": <dynamic>[],
+    "envelopeShrunk": <String, dynamic>{},
+    "envelopeShrinkLegacyDone": false,
     "walletPlans": <String, dynamic>{},
     "envelopeSweep": <String, dynamic>{},
     "envelopeMeta": <String, dynamic>{},

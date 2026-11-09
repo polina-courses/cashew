@@ -194,6 +194,10 @@ class WalletEnvelopesSection extends StatelessWidget {
         if (data.free < -0.005) {
           Future.microtask(
               () => database.shrinkEnvelopesToWallet(wallet.walletPk));
+        } else if (data.free > 0.005) {
+          // деньги вернулись на счёт: возвращаем ранее снятое с подгрупп
+          Future.microtask(
+              () => database.restoreShrunkEnvelopes(wallet.walletPk));
         }
         return Padding(
           padding: const EdgeInsetsDirectional.only(bottom: 13),

@@ -246,11 +246,18 @@ extension EnvelopePlanQueries on FinanceDatabase {
 
   /// Баланс счёта уменьшили (например, обнулили), а в подгруппах деньги
   /// остались: снимаем излишек с подгрупп, чтобы сумма сошлась со счётом.
+  /// Снятое запоминаем: если деньги на счёте вернутся (например, удалили
+  /// ошибочную трату), подгруппы пополнятся обратно (restoreShrunkEnvelopes).
+  /// Если счёт ушёл в минус, подгруппы не трогаем: это ошибка, а не обнуление.
   Future<void> shrinkEnvelopesToWallet(String walletPk) async {
     EnvelopeBalances balances = await getEnvelopeBalances(walletPk);
     if (balances.free >= -0.005) return;
+    if (balances.walletTotal < 0) return;
     Map<String, double> take = shrinkToWallet(
         lines: planLinesOf(balances, {}), walletTotal: balances.walletTotal);
+    Map<String, dynamic> ledger = _mapSetting("envelopeShrunk");
+    Map<String, dynamic> mine =
+        Map<String, dynamic>.from((ledger[walletPk] as Map?) ?? {});
     for (MapEntry<String, double> e in take.entries) {
       await addEnvelopeMove(
         walletPk: walletPk,
@@ -258,7 +265,79 @@ extension EnvelopePlanQueries on FinanceDatabase {
         toEnvelopePk: null,
         amount: e.value,
       );
+      mine[e.key] = ((mine[e.key] as num?)?.toDouble() ?? 0) + e.value;
     }
+    if (take.isNotEmpty) {
+      ledger[walletPk] = mine;
+      await updateSettings("envelopeShrunk", ledger, updateGlobalState: false);
+    }
+  }
+
+  /// Разово: подхватить снятия, сделанные версиями до учёта (сборки 120–126),
+  /// чтобы их тоже можно было вернуть.
+  Future<void> importLegacyShrinks() async {
+    if (appStateSettings["envelopeShrinkLegacyDone"] == true) return;
+    final DateTime cutoff = DateTime.utc(2026, 11, 8, 16, 0);
+    List<EnvelopeMove> moves = await (select(envelopeMoves)
+          ..where((m) =>
+              m.fromEnvelopeFk.isNotNull() &
+              m.toEnvelopeFk.isNull() &
+              m.sourceTransactionFk.isNull() &
+              m.dateCreated.isBiggerOrEqualValue(cutoff.toLocal())))
+        .get();
+    Map<String, dynamic> ledger = _mapSetting("envelopeShrunk");
+    for (EnvelopeMove m in moves) {
+      Map<String, dynamic> mine =
+          Map<String, dynamic>.from((ledger[m.walletFk] as Map?) ?? {});
+      mine[m.fromEnvelopeFk!] =
+          ((mine[m.fromEnvelopeFk!] as num?)?.toDouble() ?? 0) + m.amount;
+      ledger[m.walletFk] = mine;
+    }
+    await updateSettings("envelopeShrunk", ledger, updateGlobalState: false);
+    await updateSettings("envelopeShrinkLegacyDone", true,
+        updateGlobalState: false);
+  }
+
+  /// Деньги на счёте снова есть, а подгруппы ранее были урезаны: возвращаем
+  /// снятое из свободных денег (сначала подгруппам с высоким приоритетом).
+  Future<void> restoreShrunkEnvelopes(String walletPk) async {
+    await importLegacyShrinks();
+    Map<String, dynamic> ledger = _mapSetting("envelopeShrunk");
+    Map<String, dynamic>? mine =
+        ledger[walletPk] == null
+            ? null
+            : Map<String, dynamic>.from(ledger[walletPk] as Map);
+    if (mine == null || mine.isEmpty) return;
+    EnvelopeBalances balances = await getEnvelopeBalances(walletPk);
+    double free = balances.free;
+    if (free <= 0.005) return;
+    List<String> order = mine.keys.toList()
+      ..sort((a, b) => getEnvelopePriority(a).index
+          .compareTo(getEnvelopePriority(b).index));
+    Set<String> existing = balances.envelopes.map((e) => e.envelopePk).toSet();
+    for (String envelopePk in order) {
+      double owed = (mine[envelopePk] as num).toDouble();
+      if (!existing.contains(envelopePk)) {
+        mine.remove(envelopePk);
+        continue;
+      }
+      double give = takeFromFree(owed, free);
+      if (give <= 0) continue;
+      await addEnvelopeMove(
+        walletPk: walletPk,
+        fromEnvelopePk: null,
+        toEnvelopePk: envelopePk,
+        amount: give,
+      );
+      free -= give;
+      if (owed - give <= 0.005) {
+        mine.remove(envelopePk);
+      } else {
+        mine[envelopePk] = owed - give;
+      }
+    }
+    ledger[walletPk] = mine;
+    await updateSettings("envelopeShrunk", ledger, updateGlobalState: false);
   }
 
   /// Минусов быть не должно: нехватку в подгруппе закрывают «Свободные».
@@ -422,6 +501,7 @@ extension EnvelopePlanQueries on FinanceDatabase {
     await removeFinishedTemporaryEnvelopes(walletPk);
     await sweepEnvelopesIfMonthChanged(walletPk);
     await shrinkEnvelopesToWallet(walletPk);
+    await restoreShrunkEnvelopes(walletPk);
     await fixNegativeEnvelopes(walletPk);
     await snapshotEnvelopeBases(walletPk);
   }
