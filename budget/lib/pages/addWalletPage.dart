@@ -2,6 +2,8 @@ import 'package:budget/database/tables.dart';
 import 'package:budget/functions.dart';
 import 'package:budget/pages/addTransactionPage.dart';
 import 'package:budget/pages/editWalletsPage.dart';
+import 'package:budget/pages/editObjectivesPage.dart';
+import 'package:budget/struct/transferTarget.dart';
 import 'package:budget/pages/settingsPage.dart';
 import 'package:budget/struct/currencyFunctions.dart';
 import 'package:budget/struct/databaseGlobal.dart';
@@ -1041,6 +1043,9 @@ class _TransferBalancePopupState extends State<TransferBalancePopup> {
   late bool isNegative = widget.initialIsNegative ?? false;
   late TransactionWallet? walletFrom = widget.wallet;
   TransactionWallet? walletTo;
+  // Локальная версия: получатель перевода — счёт, цель накоплений или кредит
+  TransferTargetKind targetKind = TransferTargetKind.wallet;
+  Objective? targetObjective;
   late TimeOfDay? selectedTime = widget.initialDate != null
       ? TimeOfDay(
           hour: widget.initialDate!.hour, minute: widget.initialDate!.minute)
@@ -1120,6 +1125,55 @@ class _TransferBalancePopupState extends State<TransferBalancePopup> {
     );
   }
 
+  Future<void> pickTargetObjective() async {
+    dynamic result = await selectObjectivePopup(
+      context,
+      selectedObjective: targetObjective,
+      canSelectNoGoal: false,
+      objectiveType: targetKind == TransferTargetKind.loan
+          ? ObjectiveType.loan
+          : ObjectiveType.goal,
+    );
+    if (result is Objective) {
+      setState(() {
+        targetObjective = result;
+      });
+    }
+  }
+
+  Widget objectiveSelector() {
+    bool isLoan = targetKind == TransferTargetKind.loan;
+    return Opacity(
+      opacity: targetObjective == null ? 0.5 : 1,
+      child: Tappable(
+        key: ValueKey(targetObjective?.objectivePk ?? "none"),
+        color: getColor(context, "lightDarkAccentHeavyLight"),
+        borderRadius: 12,
+        child: Container(
+          decoration: BoxDecoration(
+            border: Border.all(
+              color: HexColor(targetObjective?.colour,
+                      defaultColor: Theme.of(context).colorScheme.primary)
+                  .withOpacity(0.7),
+              width: 2,
+            ),
+            borderRadius: BorderRadiusDirectional.all(Radius.circular(12)),
+          ),
+          padding:
+              const EdgeInsetsDirectional.symmetric(horizontal: 12, vertical: 8),
+          child: TextFont(
+            text: targetObjective?.name ??
+                (isLoan ? "Выбрать кредит" : "Выбрать цель"),
+            fontSize: 17,
+            textAlign: TextAlign.center,
+            maxLines: 3,
+          ),
+        ),
+        onTap: pickTargetObjective,
+      ),
+    );
+  }
+
   Future<void> transferBalance() async {
     AllWallets allWallets = Provider.of<AllWallets>(context, listen: false);
 
@@ -1133,6 +1187,74 @@ class _TransferBalancePopupState extends State<TransferBalancePopup> {
     TransactionWallet walletFrom = this.walletFrom ??
         Provider.of<AllWallets>(context, listen: false)
             .indexedByPk[appStateSettings["selectedWalletPk"]]!;
+    // Перевод на цель накоплений (взнос) или кредит (платёж)
+    if (targetKind != TransferTargetKind.wallet) {
+      if (targetObjective == null) {
+        await pickTargetObjective();
+        return;
+      }
+      ObjectiveTransferPlan? plan = planObjectiveTransfer(
+        kind: targetKind,
+        amount: enteredAmount *
+            getAmountRatioWalletTransferFrom(allWallets, walletFrom.walletPk),
+        objectivePk: targetObjective!.objectivePk,
+      );
+      if (plan == null) {
+        openSnackbar(
+          SnackbarMessage(
+            icon: appStateSettings["outlinedIcons"]
+                ? Icons.warning_outlined
+                : Icons.warning_rounded,
+            title: "Введите сумму",
+          ),
+        );
+        return;
+      }
+      bool isLoan = plan.objectiveLoanFk != null;
+      TransactionCategory category = isLoan
+          ? await getOrCreateLoanPaymentCategory()
+          : await initializeBalanceCorrectionCategory();
+      String title = selectedTitle.trim() != ""
+          ? selectedTitle.trim()
+          : (isLoan ? "Платёж по кредиту: " : "Взнос на цель: ") +
+              targetObjective!.name;
+      await database.createOrUpdateTransaction(
+        insert: true,
+        updateSharedEntry: false,
+        Transaction(
+          transactionPk: "-1",
+          name: title,
+          amount: plan.amount,
+          note: "",
+          categoryFk: category.categoryPk,
+          walletFk: walletFrom.walletPk,
+          dateCreated: selectedDateTime ?? DateTime.now(),
+          income: plan.income,
+          paid: true,
+          skipPaid: false,
+          objectiveFk: plan.objectiveFk,
+          objectiveLoanFk: plan.objectiveLoanFk,
+        ),
+      );
+      try {
+        await database.prepareEnvelopes(walletFrom.walletPk);
+      } catch (e) {
+        print("prepareEnvelopes after transfer: " + e.toString());
+      }
+      openSnackbar(
+        SnackbarMessage(
+          title: isLoan ? "Платёж по кредиту записан" : "Взнос на цель записан",
+          description: walletFrom.name + " → " + targetObjective!.name,
+          icon: appStateSettings["outlinedIcons"]
+              ? Icons.compare_arrows_outlined
+              : Icons.compare_arrows_rounded,
+        ),
+      );
+      savingHapticFeedback();
+      popRoute(context, true);
+      return;
+    }
+
     if (walletTo == null) {
       dynamic result = await selectWalletPopup(
         context,
@@ -1311,6 +1433,29 @@ class _TransferBalancePopupState extends State<TransferBalancePopup> {
               child: editTransferDetails,
             ),
           SizedBox(height: 13),
+          SegmentedButton<TransferTargetKind>(
+            showSelectedIcon: false,
+            segments: [
+              ButtonSegment<TransferTargetKind>(
+                  value: TransferTargetKind.wallet, label: Text("Счёт")),
+              ButtonSegment<TransferTargetKind>(
+                  value: TransferTargetKind.goal, label: Text("Цель")),
+              ButtonSegment<TransferTargetKind>(
+                  value: TransferTargetKind.loan, label: Text("Кредит")),
+            ],
+            selected: {targetKind},
+            onSelectionChanged: (Set<TransferTargetKind> selection) {
+              setState(() {
+                targetKind = selection.first;
+                targetObjective = null;
+                if (targetKind != TransferTargetKind.wallet) {
+                  isNegative = false;
+                  enteredAmount = enteredAmount.abs();
+                }
+              });
+            },
+          ),
+          SizedBox(height: 13),
           Wrap(
             alignment: WrapAlignment.center,
             crossAxisAlignment: WrapCrossAlignment.center,
@@ -1321,6 +1466,13 @@ class _TransferBalancePopupState extends State<TransferBalancePopup> {
                   walletFrom = wallet;
                 });
               }),
+              if (targetKind != TransferTargetKind.wallet)
+                Padding(
+                  padding:
+                      const EdgeInsetsDirectional.symmetric(horizontal: 10),
+                  child: Icon(Icons.arrow_forward_rounded),
+                ),
+              if (targetKind == TransferTargetKind.wallet)
               Padding(
                 padding: const EdgeInsetsDirectional.symmetric(horizontal: 10),
                 child: Tappable(
@@ -1357,11 +1509,14 @@ class _TransferBalancePopupState extends State<TransferBalancePopup> {
                   ),
                 ),
               ),
-              walletSelector(walletTo, (wallet) {
-                setState(() {
-                  walletTo = wallet;
-                });
-              }),
+              if (targetKind == TransferTargetKind.wallet)
+                walletSelector(walletTo, (wallet) {
+                  setState(() {
+                    walletTo = wallet;
+                  });
+                })
+              else
+                objectiveSelector(),
             ],
           ),
           SelectAmount(

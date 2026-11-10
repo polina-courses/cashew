@@ -307,18 +307,6 @@ class _EditWalletsPageState extends State<EditWalletsPage> {
                                       )
                                     : Container(),
                               ),
-                              TextFont(
-                                textAlign: TextAlign.start,
-                                text: walletWithDetails.numberTransactions
-                                        .toString() +
-                                    " " +
-                                    (walletWithDetails.numberTransactions == 1
-                                        ? "transaction".tr().toLowerCase()
-                                        : "transactions".tr().toLowerCase()),
-                                fontSize: 14,
-                                textColor: getColor(context, "black")
-                                    .withOpacity(0.65),
-                              ),
                             ],
                           ),
                         ],

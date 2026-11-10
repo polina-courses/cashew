@@ -2868,7 +2868,6 @@ class AmountSpentEntryRow extends StatelessWidget {
               onPressed: () {
                 ContextMenuController.removeAny();
                 copyToClipboard(label +
-                    addAmountToString("", totalCount, extraText: extraText) +
                     " • " +
                     convertToMoney(
                       Provider.of<AllWallets>(context, listen: false),
@@ -2932,19 +2931,6 @@ class AmountSpentEntryRow extends StatelessWidget {
                                                   appStateSettings["font"],
                                               fontFamilyFallback: ['Inter'],
                                               fontWeight: FontWeight.bold,
-                                            ),
-                                          ),
-                                          TextSpan(
-                                            text: addAmountToString(
-                                                " ", totalCount,
-                                                extraText: extraText),
-                                            style: TextStyle(
-                                              fontSize: 15,
-                                              color: getColor(
-                                                  context, "textLight"),
-                                              fontFamily:
-                                                  appStateSettings["font"],
-                                              fontFamilyFallback: ['Inter'],
                                             ),
                                           ),
                                         ],

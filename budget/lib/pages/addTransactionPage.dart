@@ -41,6 +41,7 @@ import 'package:budget/widgets/selectAmount.dart';
 import 'package:budget/struct/categoryWalletLinks.dart';
 import 'package:budget/struct/envelopePlan.dart';
 import 'package:budget/struct/categoryAccounts.dart';
+import 'package:budget/struct/categoryWalletRules.dart';
 import 'package:budget/widgets/categoryTopUp.dart';
 import 'package:budget/database/envelopePlanStore.dart';
 import 'package:budget/widgets/selectCategory.dart';
@@ -340,18 +341,10 @@ class _AddTransactionPageState extends State<AddTransactionPage>
         if (linked != selectedWalletPk) {
           setSelectedWalletPk(linked, manual: false);
         }
-      } else {
-        // Своего счёта у категории ещё нет — создаём (название = категория)
-        ensureCategoryWallet(category).then((wallet) {
-          if (!mounted || selectedCategory?.categoryPk != category.categoryPk) {
-            return;
-          }
-          if (wallet.walletPk != selectedWalletPk &&
-              walletChosenManually == false) {
-            setSelectedWalletPk(wallet.walletPk, manual: false);
-          }
-        });
       }
+      // Если своего счёта у категории ещё нет, здесь его НЕ создаём: счёт
+      // категории создаётся только при сохранении и только когда счёт в форме
+      // вручную не выбирали (иначе появлялся лишний счёт с названием категории).
     }
     return;
   }
@@ -630,17 +623,18 @@ class _AddTransactionPageState extends State<AddTransactionPage>
       }
 
       // Локальная версия: у новой траты категории должен быть свой счёт
-      if (widget.transaction == null &&
-          selectedIncome == false &&
-          isAddedToLoanObjective == false &&
-          walletChosenManually == false &&
-          selectedCategory != null &&
-          selectedCategory!.categoryPk != "0") {
+      {
         List<TransactionWallet> wallets =
             Provider.of<AllWallets>(context, listen: false).list;
         String main = wallets.isEmpty ? "" : mainWalletPk(wallets);
-        if (widget.selectedWallet == null ||
-            widget.selectedWallet!.walletPk == main) {
+        if (shouldAutoCreateCategoryWallet(
+            isNewTransaction: widget.transaction == null,
+            isExpense: selectedIncome == false,
+            isLoanPayment: isAddedToLoanObjective,
+            walletChosenManually: walletChosenManually,
+            categoryPk: selectedCategory?.categoryPk,
+            openedWithOtherWallet: widget.selectedWallet != null &&
+                widget.selectedWallet!.walletPk != main)) {
           TransactionWallet categoryWallet =
               await ensureCategoryWallet(selectedCategory!);
           if (categoryWallet.walletPk != selectedWalletPk) {
