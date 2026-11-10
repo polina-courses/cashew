@@ -13,6 +13,7 @@ import 'package:budget/pages/walletDetailsPage.dart';
 import 'package:budget/struct/databaseGlobal.dart';
 import 'package:budget/struct/envelopePlan.dart';
 import 'package:budget/widgets/framework/pageFramework.dart';
+import 'package:budget/widgets/openPopup.dart';
 import 'package:budget/widgets/tappable.dart';
 import 'package:budget/widgets/textWidgets.dart';
 import 'package:flutter/material.dart';
@@ -76,7 +77,7 @@ class _WalletCard extends StatelessWidget {
     if (balances.envelopes.isEmpty) return 0;
     Map<String, ScheduledInfo> scheduled =
         await getScheduledForMonth(database, wallet.walletPk);
-    return planLinesOf(balances, scheduled).fold(0.0, (sum, l) => sum + l.need);
+    return planLinesOf(balances, scheduled).fold<double>(0, (double sum, l) => sum + l.need);
   }
 
   @override
