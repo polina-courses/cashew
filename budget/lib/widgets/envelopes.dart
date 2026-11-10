@@ -5,6 +5,10 @@ import 'package:budget/colors.dart';
 import 'package:budget/database/envelopePlanStore.dart';
 import 'package:budget/database/envelopes.dart';
 import 'package:budget/struct/envelopePlan.dart';
+import 'package:budget/struct/envelopeCard.dart';
+import 'package:budget/struct/categoryAccounts.dart';
+import 'package:budget/widgets/designTokens.dart';
+import 'package:budget/widgets/categoryTopUp.dart';
 import 'package:budget/database/tables.dart';
 import 'package:budget/functions.dart';
 import 'package:budget/struct/databaseGlobal.dart';
@@ -201,22 +205,37 @@ class WalletEnvelopesSection extends StatelessWidget {
         }
         return Padding(
           padding: const EdgeInsetsDirectional.only(bottom: 13),
-          child: Container(
-            decoration: BoxDecoration(
-              color: getColor(context, "lightDarkAccentHeavyLight"),
-              boxShadow: boxShadowCheck(boxShadowGeneral(context)),
-              borderRadius: BorderRadiusDirectional.circular(15),
-            ),
-            padding: const EdgeInsetsDirectional.symmetric(
-                horizontal: 15, vertical: 12),
-            child: data.envelopes.isEmpty
-                ? _EmptyEnvelopes(wallet: wallet)
-                : _EnvelopesList(wallet: wallet, data: data),
-          ),
+          child: data.envelopes.isEmpty
+              ? _sectionCard(
+                  context,
+                  _EmptyEnvelopes(wallet: wallet),
+                  padding: const EdgeInsetsDirectional.symmetric(
+                      horizontal: 15, vertical: 12),
+                )
+              : _EnvelopesList(wallet: wallet, data: data),
         );
       },
     );
   }
+}
+
+/// Белая карточка секции (как в макете: скругление 20).
+Widget _sectionCard(BuildContext context, Widget child,
+    {EdgeInsetsGeometry padding =
+        const EdgeInsetsDirectional.symmetric(horizontal: 16, vertical: 4)}) {
+  return Container(
+    decoration: BoxDecoration(
+      color: getColor(context, "lightDarkAccentHeavyLight"),
+      boxShadow: boxShadowCheck(boxShadowGeneral(context)),
+      borderRadius: BorderRadiusDirectional.circular(20),
+    ),
+    padding: padding,
+    child: child,
+  );
+}
+
+String envelopeDayMonth(DateTime date) {
+  return getWordedDateShort(date, includeYear: false, showTodayTomorrow: false);
 }
 
 class _EmptyEnvelopes extends StatelessWidget {
@@ -253,38 +272,41 @@ class _EmptyEnvelopes extends StatelessWidget {
 }
 
 /// Значок приоритета: три столбика, закрашено 3 / 2 / 1.
+/// Значок приоритета из трёх столбиков: высокий — красный, средний — жёлтый,
+/// низкий — серый; невключённые столбики бледные.
 class EnvelopePriorityIcon extends StatelessWidget {
   const EnvelopePriorityIcon(this.priority, {super.key});
   final EnvelopePriority priority;
 
   @override
   Widget build(BuildContext context) {
-    int level = priority == EnvelopePriority.high
-        ? 3
-        : priority == EnvelopePriority.medium
-            ? 2
-            : 1;
-    Color on = Theme.of(context).colorScheme.primary;
+    int level = priorityLevel(priority);
+    Color on = AppTokens.priorityColor(priority);
     Color off = getColor(context, "textLight").withOpacity(0.25);
+    List<double> heights = [7, 12, 17];
     return Tooltip(
       message: "Приоритет: " + envelopePriorityLabel(priority).toLowerCase(),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          for (int i = 1; i <= 3; i++)
-            Padding(
-              padding: const EdgeInsetsDirectional.only(end: 2),
-              child: Container(
-                width: 4,
-                height: 4.0 + i * 3.5,
-                decoration: BoxDecoration(
-                  color: i <= level ? on : off,
-                  borderRadius: BorderRadius.circular(1),
+      child: SizedBox(
+        width: 22,
+        height: 22,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            for (int i = 0; i < 3; i++)
+              Padding(
+                padding: EdgeInsetsDirectional.only(end: i < 2 ? 3 : 0),
+                child: Container(
+                  width: 4,
+                  height: heights[i],
+                  decoration: BoxDecoration(
+                    color: i < level ? on : off,
+                    borderRadius: BorderRadius.circular(1),
+                  ),
                 ),
               ),
-            ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -463,6 +485,382 @@ class _CategoryHeader extends StatelessWidget {
   }
 }
 
+/// Сводка вверху счёта: сколько лежит и сколько нужно добавить (с ЗП и аванса).
+class _NeedSummary extends StatelessWidget {
+  const _NeedSummary(
+      {required this.wallet, required this.total, required this.need});
+  final TransactionWallet wallet;
+  final double total;
+  final double need;
+
+  String shareLabel(PayShare share) {
+    switch (share.kind) {
+      case PayKind.salary:
+        return "С зарплаты, " + envelopeDayMonth(share.date);
+      case PayKind.advance:
+        return "С аванса, " + envelopeDayMonth(share.date);
+      case PayKind.now:
+        return "Нужно сейчас";
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    Color light = getColor(context, "textLight");
+    String money(double v) => envelopeMoney(context, wallet, v);
+    List<PayShare> shares = payShares(need, DateTime.now());
+    Widget needBox;
+    if (need > 0.005) {
+      needBox = Container(
+        decoration: BoxDecoration(
+          color: AppTokens.danger.withOpacity(0.10),
+          borderRadius: BorderRadius.circular(14),
+        ),
+        padding:
+            const EdgeInsetsDirectional.symmetric(horizontal: 14, vertical: 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: TextFont(
+                    text: "Нужно добавить",
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    textColor: getColor(context, "expenseAmount"),
+                  ),
+                ),
+                SizedBox(width: 12),
+                TextFont(
+                  text: money(need),
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  maxLines: 1,
+                  textColor: getColor(context, "expenseAmount"),
+                ),
+              ],
+            ),
+            SizedBox(height: 10),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                for (int i = 0; i < 2; i++) ...[
+                  if (i == 1) SizedBox(width: 8),
+                  Expanded(
+                    child: i < shares.length
+                        ? Container(
+                            decoration: BoxDecoration(
+                              color:
+                                  getColor(context, "lightDarkAccentHeavyLight"),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            padding: const EdgeInsetsDirectional.symmetric(
+                                horizontal: 10, vertical: 8),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                TextFont(
+                                  text: shareLabel(shares[i]),
+                                  fontSize: 13,
+                                  maxLines: 2,
+                                  textColor: light,
+                                ),
+                                SizedBox(height: 2),
+                                TextFont(
+                                  text: money(shares[i].amount),
+                                  fontSize: 17,
+                                  fontWeight: FontWeight.w600,
+                                  maxLines: 1,
+                                ),
+                              ],
+                            ),
+                          )
+                        : SizedBox.shrink(),
+                  ),
+                ],
+              ],
+            ),
+          ],
+        ),
+      );
+    } else {
+      needBox = Container(
+        decoration: BoxDecoration(
+          color: AppTokens.accent.withOpacity(0.12),
+          borderRadius: BorderRadius.circular(14),
+        ),
+        padding:
+            const EdgeInsetsDirectional.symmetric(horizontal: 14, vertical: 12),
+        child: Row(
+          children: [
+            Icon(Icons.check_rounded,
+                size: 20, color: getColor(context, "incomeAmount")),
+            SizedBox(width: 8),
+            Expanded(
+              child: TextFont(
+                text: "На этот месяц денег хватает",
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+                maxLines: 2,
+                textColor: getColor(context, "incomeAmount"),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+    return _sectionCard(
+      context,
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          TextFont(
+              text: "На счёте сейчас",
+              fontSize: 14,
+              textAlign: TextAlign.start,
+              textColor: light),
+          SizedBox(height: 4),
+          TextFont(
+            text: money(total),
+            fontSize: 34,
+            fontWeight: FontWeight.bold,
+            textAlign: TextAlign.start,
+            maxLines: 1,
+          ),
+          SizedBox(height: 16),
+          needBox,
+        ],
+      ),
+      padding: const EdgeInsetsDirectional.all(20),
+    );
+  }
+}
+
+/// Одна подгруппа: значок приоритета, название слева (до двух строк), сумма
+/// справа; ниже полоска, короткая строка и доли ЗП / аванс.
+class _EnvelopeRow extends StatelessWidget {
+  const _EnvelopeRow({
+    required this.wallet,
+    required this.envelope,
+    required this.line,
+    required this.balance,
+    required this.showTopBorder,
+  });
+  final TransactionWallet wallet;
+  final Envelope envelope;
+  final PlanLine line;
+  final double balance;
+  final bool showTopBorder;
+
+  @override
+  Widget build(BuildContext context) {
+    Color light = getColor(context, "textLight");
+    String money(double v) => envelopeMoney(context, wallet, v);
+    EnvelopePriority priority = getEnvelopePriority(envelope.envelopePk);
+    EnvelopeGoal goal = envelopeGoalOf(envelope, balance);
+    EnvelopeCardInfo info =
+        envelopeCardInfo(line, targetAmount: envelope.targetAmount);
+
+    // короткая строка-пояснение
+    String? note;
+    String own = (envelope.note ?? "").trim();
+    if (own.isNotEmpty) {
+      note = own;
+    } else if (goal.hasGoal) {
+      List<String> parts = [];
+      if (goal.hasAmount) parts.add("цель " + money(goal.targetAmount!));
+      if (goal.targetDate != null) {
+        parts.add("к " + envelopeDate(goal.targetDate!));
+      }
+      note = parts.join(" ");
+    } else if (line.accrualDue != null) {
+      note = "копим до " + envelopeDate(line.accrualDue!);
+    } else if (info.required > 0) {
+      note = "в этом месяце нужно " + money(info.required);
+    } else if (line.wish > 0) {
+      note = "копим по возможности";
+    }
+    if (envelope.percent > 0) {
+      String share = "доля " + formatNumberForInput(envelope.percent, 1) + "%";
+      note = note == null ? share : note + " · " + share;
+    }
+
+    // состояние справа от пояснения
+    String stateText = "";
+    Color stateColor = light;
+    switch (info.state) {
+      case EnvelopeCardState.short:
+        stateText = "ещё " + money(info.amount);
+        stateColor = getColor(context, "expenseAmount");
+        break;
+      case EnvelopeCardState.enough:
+        stateText = "хватает";
+        stateColor = getColor(context, "incomeAmount");
+        break;
+      case EnvelopeCardState.saving:
+        double? monthly = goal.monthlyRecommended;
+        stateText = monthly != null
+            ? money(monthly) + " в месяц"
+            : "осталось " + money(max(0.0, info.amount - balance));
+        stateColor = getColor(context, "black");
+        break;
+      case EnvelopeCardState.none:
+        break;
+    }
+
+    Color barColor = info.state == EnvelopeCardState.enough
+        ? AppTokens.accent
+        : AppTokens.priorityColor(priority);
+    List<PayShare> shares = payShares(line.need, DateTime.now());
+
+    return Container(
+      decoration: BoxDecoration(
+        border: showTopBorder
+            ? Border(
+                top: BorderSide(
+                    color: Theme.of(context).dividerColor.withOpacity(0.5)))
+            : null,
+      ),
+      child: Tappable(
+        color: Colors.transparent,
+        borderRadius: 10,
+        onTap: () =>
+            openEnvelopeEditor(context, wallet: wallet, envelope: envelope),
+        child: Padding(
+          padding: const EdgeInsetsDirectional.symmetric(vertical: 14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: const EdgeInsetsDirectional.only(top: 1),
+                    child: EnvelopePriorityIcon(priority),
+                  ),
+                  SizedBox(width: 10),
+                  Expanded(
+                    child: TextFont(
+                      text: envelope.name,
+                      fontSize: 17,
+                      fontWeight: FontWeight.w600,
+                      textAlign: TextAlign.start,
+                      maxLines: 2,
+                    ),
+                  ),
+                  if (isTemporaryEnvelope(envelope.envelopePk))
+                    Padding(
+                      padding: const EdgeInsetsDirectional.only(start: 6),
+                      child: Tooltip(
+                        message: "Временная, пока есть платежи",
+                        child: Icon(Icons.hourglass_bottom_rounded,
+                            size: 14, color: light),
+                      ),
+                    ),
+                  SizedBox(width: 10),
+                  TextFont(
+                    text: money(balance),
+                    fontSize: 17,
+                    fontWeight: FontWeight.bold,
+                    maxLines: 1,
+                    textColor: envelopeAmountColor(context, balance),
+                  ),
+                ],
+              ),
+              SizedBox(height: 8),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: LinearProgressIndicator(
+                  value: info.progress,
+                  minHeight: 8,
+                  backgroundColor:
+                      Theme.of(context).colorScheme.secondaryContainer,
+                  color: barColor,
+                ),
+              ),
+              if (note != null || stateText.isNotEmpty) ...[
+                SizedBox(height: 8),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: TextFont(
+                        text: note ?? "",
+                        fontSize: 14,
+                        textAlign: TextAlign.start,
+                        maxLines: 2,
+                        textColor: light,
+                      ),
+                    ),
+                    if (stateText.isNotEmpty) ...[
+                      SizedBox(width: 12),
+                      TextFont(
+                        text: stateText,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        maxLines: 1,
+                        textColor: stateColor,
+                      ),
+                    ],
+                  ],
+                ),
+              ],
+              if (shares.isNotEmpty) ...[
+                SizedBox(height: 8),
+                Row(
+                  children: [
+                    for (int i = 0; i < 2; i++) ...[
+                      if (i == 1) SizedBox(width: 8),
+                      Expanded(
+                        child: i < shares.length
+                            ? Container(
+                                decoration: BoxDecoration(
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .secondaryContainer
+                                      .withOpacity(0.5),
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                padding: const EdgeInsetsDirectional.symmetric(
+                                    horizontal: 10, vertical: 6),
+                                child: Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    TextFont(
+                                      text: shares[i].kind == PayKind.salary
+                                          ? "ЗП"
+                                          : shares[i].kind == PayKind.advance
+                                              ? "Аванс"
+                                              : "Сейчас",
+                                      fontSize: 13,
+                                      textColor: light,
+                                    ),
+                                    SizedBox(width: 6),
+                                    TextFont(
+                                      text: money(shares[i].amount),
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w600,
+                                      maxLines: 1,
+                                    ),
+                                  ],
+                                ),
+                              )
+                            : SizedBox.shrink(),
+                      ),
+                    ],
+                  ],
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _EnvelopesList extends StatelessWidget {
   const _EnvelopesList({required this.wallet, required this.data});
   final TransactionWallet wallet;
@@ -480,6 +878,8 @@ class _EnvelopesList extends StatelessWidget {
   Widget buildList(BuildContext context, Map<String, ScheduledInfo> scheduled) {
     List<PlanLine> lines = planLinesOf(data, scheduled);
     PlanLine lineOf(Envelope e) => lines.firstWhere((l) => l.pk == e.envelopePk);
+    double totalNeed =
+        lines.fold<double>(0, (double sum, PlanLine l) => sum + l.need);
     // Подгруппы по категориям: сначала сгруппированные, затем без категории
     List<String?> categoryOrder = [];
     for (Envelope e in data.envelopes) {
@@ -492,221 +892,168 @@ class _EnvelopesList extends StatelessWidget {
         ...data.envelopes
             .where((e) => getEnvelopeCategoryPk(e.envelopePk) == c)
     ];
+    // заголовки категорий нужны, только если категорий несколько
+    bool manyCategories = categoryOrder.length > 1;
+    List<Widget> rows = [];
+    for (int i = 0; i < sorted.length; i++) {
+      Envelope envelope = sorted[i];
+      String? category = getEnvelopeCategoryPk(envelope.envelopePk);
+      bool firstOfCategory = sorted.indexWhere(
+              (e) => getEnvelopeCategoryPk(e.envelopePk) == category) ==
+          i;
+      if (manyCategories && firstOfCategory) {
+        rows.add(_CategoryHeader(
+          wallet: wallet,
+          categoryPk: category,
+          need: sorted
+              .where((e) => getEnvelopeCategoryPk(e.envelopePk) == category)
+              .fold<double>(0, (sum, e) => sum + lineOf(e).need),
+        ));
+      }
+      rows.add(_EnvelopeRow(
+        wallet: wallet,
+        envelope: envelope,
+        line: lineOf(envelope),
+        balance: data.balanceOf(envelope.envelopePk),
+        showTopBorder: i > 0 && !(manyCategories && firstOfCategory),
+      ));
+    }
+    Color light = getColor(context, "textLight");
+    String mainPk = mainWalletPk(
+        Provider.of<AllWallets>(context, listen: false).list);
+    bool canTopUp = totalNeed > 0.005 && wallet.walletPk != mainPk;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Row(
-          children: [
-            Expanded(
-              child: TextFont(
-                text: "Подгруппы счёта",
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
+        _NeedSummary(
+            wallet: wallet, total: data.walletTotal, need: totalNeed),
+        SizedBox(height: 16),
+        Padding(
+          padding: const EdgeInsetsDirectional.symmetric(horizontal: 4),
+          child: Row(
+            children: [
+              Expanded(
+                child: TextFont(
+                  text: "Подгруппы",
+                  fontSize: 17,
+                  fontWeight: FontWeight.w600,
+                  textAlign: TextAlign.start,
+                ),
               ),
-            ),
-            IconButton(
-              tooltip: "Добавить подгруппу",
-              icon: Icon(Icons.add_rounded),
-              onPressed: () => openEnvelopeEditor(context, wallet: wallet),
-            ),
-          ],
-        ),
-        for (Envelope envelope in sorted) ...[
-          if (sorted.indexWhere((e) =>
-                  getEnvelopeCategoryPk(e.envelopePk) ==
-                  getEnvelopeCategoryPk(envelope.envelopePk)) ==
-              sorted.indexOf(envelope))
-            _CategoryHeader(
-              wallet: wallet,
-              categoryPk: getEnvelopeCategoryPk(envelope.envelopePk),
-              need: sorted
-                  .where((e) =>
-                      getEnvelopeCategoryPk(e.envelopePk) ==
-                      getEnvelopeCategoryPk(envelope.envelopePk))
-                  .fold<double>(0, (sum, e) => sum + lineOf(e).need),
-            ),
-          Tappable(
-            color: Colors.transparent,
-            borderRadius: 10,
-            onTap: () =>
-                openEnvelopeEditor(context, wallet: wallet, envelope: envelope),
-            child: Padding(
-              padding: const EdgeInsetsDirectional.symmetric(vertical: 8),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            EnvelopePriorityIcon(
-                                getEnvelopePriority(envelope.envelopePk)),
-                            SizedBox(width: 8),
-                            Flexible(
-                              child: TextFont(
-                                text: envelope.name,
-                                fontSize: 16,
-                                maxLines: 1,
-                              ),
-                            ),
-                            if (isTemporaryEnvelope(envelope.envelopePk))
-                              Padding(
-                                padding:
-                                    const EdgeInsetsDirectional.only(start: 6),
-                                child: Tooltip(
-                                  message: "Временная, пока есть платежи",
-                                  child: Icon(Icons.hourglass_bottom_rounded,
-                                      size: 14,
-                                      color: getColor(context, "textLight")),
-                                ),
-                              ),
-                          ],
-                        ),
-                        EnvelopeNeedLines(wallet: wallet, line: lineOf(envelope)),
-                        if ((envelope.note ?? "").trim().isNotEmpty)
-                          Padding(
-                            padding: const EdgeInsetsDirectional.only(
-                                top: 1, bottom: 2, end: 10),
-                            child: TextFont(
-                              text: envelope.note!.trim(),
-                              fontSize: 13,
-                              maxLines: 3,
-                              textColor: getColor(context, "textLight"),
-                            ),
-                          ),
-                        if (envelope.percent > 0)
-                          TextFont(
-                            text: "доля " +
-                                formatNumberForInput(envelope.percent, 1) +
-                                "%",
-                            fontSize: 12,
-                            textColor: getColor(context, "textLight"),
-                          ),
-                        _EnvelopeGoalLines(
-                          wallet: wallet,
-                          goal: envelopeGoalOf(
-                              envelope, data.balanceOf(envelope.envelopePk)),
-                        ),
-                      ],
-                    ),
+              Tappable(
+                color: AppTokens.accentSoft,
+                borderRadius: 12,
+                onTap: () => openEnvelopeEditor(context, wallet: wallet),
+                child: Container(
+                  height: 40,
+                  padding: const EdgeInsetsDirectional.symmetric(horizontal: 14),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.add_rounded,
+                          size: 18, color: AppTokens.accentDark),
+                      SizedBox(width: 6),
+                      TextFont(
+                        text: "Добавить",
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        textColor: AppTokens.accentDark,
+                      ),
+                    ],
                   ),
-                  TextFont(
-                    text: envelopeMoney(
-                        context, wallet, data.balanceOf(envelope.envelopePk)),
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    textColor: envelopeAmountColor(
-                        context, data.balanceOf(envelope.envelopePk)),
-                  ),
-                ],
+                ),
               ),
-            ),
-          ),
-        ],
-        Tappable(
-          color: Colors.transparent,
-          borderRadius: 10,
-          onTap: () => openBottomSheet(
-              context, EnvelopeArchiveSheet(wallet: wallet),
-              popupWithKeyboard: false),
-          child: Padding(
-            padding: const EdgeInsetsDirectional.symmetric(vertical: 8),
-            child: TextFont(
-              text: "Архив подгрупп",
-              fontSize: 14,
-              textColor: getColor(context, "textLight"),
-            ),
+            ],
           ),
         ),
-        Divider(),
-        Row(
-          children: [
-            Expanded(
-              child: TextFont(
-                text: "Свободно",
-                fontSize: 16,
-                textColor: getColor(context, "textLight"),
-              ),
-            ),
-            TextFont(
-              text: envelopeMoney(context, wallet, data.free),
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-              textColor: envelopeAmountColor(context, data.free),
-            ),
-          ],
-        ),
-        if (data.percentTotal > 100.0001)
-          Padding(
-            padding: const EdgeInsetsDirectional.only(top: 6),
-            child: TextFont(
-              text: "Сумма долей больше 100% (" +
-                  formatNumberForInput(data.percentTotal, 1) +
-                  "%). Поправьте доли подгрупп.",
-              fontSize: 13,
-              maxLines: 3,
-              textColor: getColor(context, "expenseAmount"),
-            ),
-          ),
         SizedBox(height: 10),
+        _sectionCard(
+          context,
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              ...rows,
+              Tappable(
+                color: Colors.transparent,
+                borderRadius: 10,
+                onTap: () => openBottomSheet(
+                    context, EnvelopeArchiveSheet(wallet: wallet),
+                    popupWithKeyboard: false),
+                child: Padding(
+                  padding: const EdgeInsetsDirectional.symmetric(vertical: 12),
+                  child: TextFont(
+                    text: "Архив подгрупп",
+                    fontSize: 14,
+                    textAlign: TextAlign.start,
+                    textColor: light,
+                  ),
+                ),
+              ),
+              Divider(height: 1),
+              Padding(
+                padding: const EdgeInsetsDirectional.symmetric(vertical: 12),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: TextFont(
+                        text: "Свободно",
+                        fontSize: 16,
+                        textAlign: TextAlign.start,
+                        textColor: light,
+                      ),
+                    ),
+                    TextFont(
+                      text: envelopeMoney(context, wallet, data.free),
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      maxLines: 1,
+                      textColor: envelopeAmountColor(context, data.free),
+                    ),
+                  ],
+                ),
+              ),
+              if (data.percentTotal > 100.0001)
+                Padding(
+                  padding: const EdgeInsetsDirectional.only(bottom: 12),
+                  child: TextFont(
+                    text: "Сумма долей больше 100% (" +
+                        formatNumberForInput(data.percentTotal, 1) +
+                        "%). Поправьте доли подгрупп.",
+                    fontSize: 13,
+                    maxLines: 3,
+                    textAlign: TextAlign.start,
+                    textColor: getColor(context, "expenseAmount"),
+                  ),
+                ),
+            ],
+          ),
+        ),
+        SizedBox(height: 16),
+        if (canTopUp) ...[
+          Tappable(
+            color: AppTokens.accent,
+            borderRadius: 16,
+            onTap: () => openTopUpSheet(context),
+            child: Container(
+              height: 52,
+              alignment: Alignment.center,
+              child: TextFont(
+                text: "Пополнить на " + envelopeMoney(context, wallet, totalNeed),
+                fontSize: 17,
+                fontWeight: FontWeight.w600,
+                maxLines: 1,
+                textColor: Colors.white,
+              ),
+            ),
+          ),
+          SizedBox(height: 10),
+        ],
         Button(
-          label: "Подгруппы: распределить, переложить, изменить",
+          label: "Переложить и изменить подгруппы",
           expandedLayout: true,
           onTap: () => openEnvelopeTableSheet(context, wallet: wallet),
         ),
       ],
-    );
-  }
-}
-
-class _EnvelopeGoalLines extends StatelessWidget {
-  const _EnvelopeGoalLines({required this.wallet, required this.goal});
-  final TransactionWallet wallet;
-  final EnvelopeGoal goal;
-
-  @override
-  Widget build(BuildContext context) {
-    if (!goal.hasGoal) return SizedBox.shrink();
-    String? progress = envelopeGoalProgressText(context, wallet, goal);
-    String? hint = envelopeGoalHintText(context, wallet, goal);
-    return Padding(
-      padding: const EdgeInsetsDirectional.only(top: 3, end: 10),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (progress != null)
-            TextFont(
-              text: progress,
-              fontSize: 12,
-              maxLines: 2,
-              textColor: getColor(context, "textLight"),
-            ),
-          if (goal.hasAmount)
-            Padding(
-              padding: const EdgeInsetsDirectional.symmetric(vertical: 4),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(4),
-                child: LinearProgressIndicator(
-                  value: goal.progress,
-                  minHeight: 5,
-                  backgroundColor:
-                      Theme.of(context).colorScheme.secondaryContainer,
-                  color: goal.reached
-                      ? getColor(context, "incomeAmount")
-                      : Theme.of(context).colorScheme.primary,
-                ),
-              ),
-            ),
-          if (hint != null && (goal.reached || (goal.daysLeft ?? 1) <= 0))
-            TextFont(
-              text: hint,
-              fontSize: 12,
-              maxLines: 2,
-              textColor: envelopeGoalHintColor(context, goal),
-            ),
-        ],
-      ),
     );
   }
 }
